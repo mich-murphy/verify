@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // validRemoteArg rejects values that could be parsed as options or break a refspec.
@@ -18,26 +19,17 @@ func validRemoteArg(s string) bool {
 // netGit runs git for network operations. Unlike run it keeps the user's
 // environment and config, because remotes need the user's credentials.
 func (r *Repo) netGit(ctx context.Context, args ...string) ([]byte, error) {
-	// #nosec G204 -- fixed git executable; callers validate remote and ref arguments.
-	cmd := exec.CommandContext(ctx, r.git, append([]string{"-C", r.Root}, args...)...)
-	env := make([]string, 0, len(os.Environ())+1)
+	env := map[string]string{}
 	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
+		k, v, _ := strings.Cut(kv, "=")
 		switch k {
 		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR":
 			continue
 		}
-		env = append(env, kv)
+		env[k] = v
 	}
-	env = append(env, "GIT_TERMINAL_PROMPT=0")
-	cmd.Env = env
-	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
-	}
-	return out.Bytes(), nil
+	env["GIT_TERMINAL_PROMPT"] = "0"
+	return r.foreground(ctx, r.Root, append([]string{"-C", r.Root}, args...), env, 30*time.Minute)
 }
 
 // RemoteBranchSHA returns the commit at refs/heads/<branch> on remote, or ""

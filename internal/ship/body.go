@@ -54,7 +54,7 @@ func Body(in BodyInput) string {
 }
 
 func allFindings(in BodyInput) []state.Finding {
-	return eligible.Findings(in.Check, in.Review, in.Verify, in.Branch)
+	return eligible.EffectiveFindings(in.Check, in.Review, in.Verify, in.Branch, in.SHA)
 }
 
 func writeFindings(b *strings.Builder, in BodyInput) {

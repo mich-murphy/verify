@@ -3,7 +3,6 @@
 package gitx
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,14 +11,23 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/mich-murphy/verify/internal/runner"
 )
 
 // Repo identifies a working tree and the canonical Git common directory.
 // Open is the only supported constructor; fields must not be changed by callers.
 type Repo struct {
-	Root      string
-	CommonDir string
-	git       string
+	Root        string
+	CommonDir   string
+	git         string
+	commandOnce sync.Once
+	commandGate chan struct{} // Serializes Git without delaying cancelled waiters.
+	commands    gitCommands
+	unsettled   atomic.Bool
 }
 
 // Open discovers a non-bare working tree without trusting inherited Git variables.
@@ -33,7 +41,7 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.Root, err = filepath.EvalSymlinks(strings.TrimSpace(string(root)))
+	r.Root, err = filepath.EvalSymlinks(strings.TrimSuffix(string(root), "\n"))
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +49,7 @@ func Open(ctx context.Context, dir string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.CommonDir, err = filepath.EvalSymlinks(strings.TrimSpace(string(common)))
+	r.CommonDir, err = filepath.EvalSymlinks(strings.TrimSuffix(string(common), "\n"))
 	if err != nil {
 		return nil, err
 	}
@@ -55,38 +63,67 @@ func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 // runIn is run targeting dir (for example a Verify-owned worktree) instead of the repository root.
 func (r *Repo) runIn(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	fixed := []string{"--no-pager", "--no-optional-locks", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.symlinks=true", "-c", "diff.external=", "-c", "protocol.allow=never", "-c", "credential.helper=", "-c", "core.askPass=", "-C", dir}
-	// #nosec G204 -- Fixed Git executable and hardened argv boundary; revisions and paths cannot become options.
-	cmd := exec.CommandContext(ctx, r.git, append(fixed, args...)...)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.TempDir(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "LC_ALL=C", "GIT_LFS_SKIP_SMUDGE=1", "GIT_NO_REPLACE_OBJECTS=1", "GIT_NO_LAZY_FETCH=1"}
-	var out, stderr limitedBuffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git %s: %w: %s", args[0], err, stderr.String())
+	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": os.TempDir(), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat", "LC_ALL": "C", "GIT_LFS_SKIP_SMUDGE": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_NO_LAZY_FETCH": "1"}
+	return r.foreground(ctx, dir, append(fixed, args...), env, 5*time.Minute)
+}
+
+// ErrUnsettled requires explicit worktree recovery, never an automatic retry.
+var ErrUnsettled = errors.New("git subprocess cleanup incomplete; repository execution quarantined")
+
+type gitCommands interface {
+	Run(context.Context, runner.Command) (runner.Result, error)
+}
+
+// Settled is sticky for the lifetime of Repo. Worktree owners must consult it
+// at release time, including after errors swallowed by inspection helpers.
+func (r *Repo) Settled() bool {
+	return !r.unsettled.Load()
+}
+
+func (r *Repo) initCommandGate() {
+	r.commandOnce.Do(func() { r.commandGate = make(chan struct{}, 1) })
+}
+
+func (r *Repo) foreground(ctx context.Context, dir string, args []string, env map[string]string, timeout time.Duration) ([]byte, error) {
+	r.initCommandGate()
+	select {
+	case r.commandGate <- struct{}{}:
+		defer func() { <-r.commandGate }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	if out.overflow {
+	if r.unsettled.Load() {
+		return nil, ErrUnsettled
+	}
+	if r.commands == nil {
+		rn, err := runner.New(runner.Config{OutputLimit: 16 << 20})
+		if err != nil {
+			return nil, err
+		}
+		r.commands = rn
+	}
+	result, err := r.commands.Run(ctx, runner.Command{Args: append([]string{r.git}, args...), Dir: dir, Env: env, Timeout: timeout})
+	if err != nil {
+		return nil, err
+	}
+	if !result.Settled {
+		r.unsettled.Store(true)
+		return nil, fmt.Errorf("%w: %s", errors.Join(ErrUnsettled, ctx.Err()), result.Error)
+	}
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("git: %w", ctx.Err())
+	}
+	if result.Stdout.Truncated || result.Stderr.Truncated {
 		return nil, errors.New("git output exceeds 16 MiB")
 	}
-	return out.Bytes(), nil
-}
-
-type limitedBuffer struct {
-	buffer   bytes.Buffer
-	overflow bool
-}
-
-func (b *limitedBuffer) Bytes() []byte  { return b.buffer.Bytes() }
-func (b *limitedBuffer) String() string { return b.buffer.String() }
-
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	remaining := (16 << 20) - b.buffer.Len()
-	if len(p) > remaining {
-		p = p[:remaining]
-		b.overflow = true
+	if result.Status != runner.Pass {
+		cause := result.ProcessError
+		if cause == nil {
+			cause = errors.New(result.Error)
+		}
+		return nil, fmt.Errorf("git: %w: %s", cause, result.Stderr.Output)
 	}
-	_, err := b.buffer.Write(p)
-	return n, err
+	return []byte(result.Stdout.Output), nil
 }
 
 var oidPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)

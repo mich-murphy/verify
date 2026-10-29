@@ -96,9 +96,7 @@ func runInWorktree(ctx context.Context, repo *gitx.Repo, store *state.Store, sha
 	}
 	settled := true
 	defer func() {
-		if settled {
-			runErr = errors.Join(runErr, release())
-		}
+		runErr = errors.Join(runErr, repo.ReleaseWorktreeUse(release, settled))
 	}()
 	if err = repo.ResetWorktree(ctx, wt, sha, []string{"node_modules", ".turbo"}); err != nil {
 		settled = false // Git may still own the path after a failed reset.
@@ -292,7 +290,9 @@ func assertions(sc config.Scenario, res runner.Result) (string, bool) {
 	}
 	out := []byte(res.Stdout.Output)
 	if sc.StdoutContains != nil && !bytes.Contains(out, []byte(*sc.StdoutContains)) {
-		if res.Stdout.Truncated {
+		// A total smaller than the captured prefix is incomplete metadata, not
+		// evidence that a longer substring is impossible.
+		if res.Stdout.Truncated && (res.Stdout.Bytes < int64(len(out)) || res.Stdout.Bytes >= int64(len(*sc.StdoutContains))) {
 			unknown = true
 		} else {
 			bad = append(bad, fmt.Sprintf("stdout does not contain %q", *sc.StdoutContains))

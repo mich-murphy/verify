@@ -56,7 +56,7 @@ func gather(env *Env) (*view, *viewErr) {
 	}
 	st := state.Open(repo.CommonDir)
 	name, _ := repo.Branch(env.Ctx)
-	recs, err := loadRecords(name, repo, st, sha, env)
+	recs, err := loadRecords(name, st, sha)
 	if err != nil {
 		return nil, &viewErr{ExitBlocked, err.Error(), "delete the corrupt record under " + st.Dir + " and rerun the step"}
 	}
@@ -166,7 +166,7 @@ type records struct {
 	br  *state.Branch
 }
 
-func loadRecords(name string, _ *gitx.Repo, st *state.Store, sha string, _ *Env) (records, error) {
+func loadRecords(name string, st *state.Store, sha string) (records, error) {
 	var r records
 	var err error
 	if r.chk, err = loadOpt(st.LoadCheck(sha)); err != nil {

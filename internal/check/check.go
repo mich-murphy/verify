@@ -169,9 +169,7 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 		return fmt.Errorf("mark worktree in use: %w", err)
 	}
 	defer func() {
-		if !rc.unsettled {
-			runErr = errors.Join(runErr, release())
-		}
+		runErr = errors.Join(runErr, rc.repo.ReleaseWorktreeUse(release, !rc.unsettled))
 	}()
 	if err = rc.repo.ResetWorktree(ctx, wt, sha, []string{"node_modules", ".turbo"}); err != nil {
 		// Git's subprocess may still own the path after a failed/cancelled reset.

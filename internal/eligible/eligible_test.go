@@ -38,7 +38,9 @@ func TestReviewProjectionAndFreshness(t *testing.T) {
 	if got := Evaluate(input); got.Eligible || len(got.Blocking) != 1 {
 		t.Fatalf("mismatched branch IDs must preserve record blocker: %+v", got)
 	}
-	input.Branch.Findings = append(input.Branch.Findings, state.Finding{ID: "F1", Source: "review", Severity: "block", State: "accepted", Message: "accepted"})
+	accepted := f
+	accepted.State = state.StateAccepted
+	input.Branch.Findings = append(input.Branch.Findings, accepted)
 	if got := Evaluate(input); !got.Eligible {
 		t.Fatalf("accepted branch disposition should override stale record: %+v", got)
 	}
@@ -102,7 +104,7 @@ func TestEvaluate(t *testing.T) {
 		{"review finding resolved on branch", Input{
 			SHA: sha, Check: chk("standard"),
 			Review: &state.ReviewRecord{SHA: sha, Findings: []state.Finding{blk("F1", "review")}},
-			Branch: &state.Branch{Findings: []state.Finding{{ID: "F1", Source: "review", Severity: "block", State: "resolved"}}},
+			Branch: &state.Branch{Findings: []state.Finding{{ID: "F1", Source: "review", Rule: "F1", Severity: "block", State: "resolved", Message: "m"}}},
 		}, true, "verify ship", "", 0},
 		{"record finding unknown to branch blocks", Input{
 			SHA: sha, Check: chk("standard"),

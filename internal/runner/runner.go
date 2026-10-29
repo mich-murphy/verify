@@ -57,8 +57,11 @@ type Result struct {
 	Started, Finished time.Time
 	ExitCode          int
 	Error             string
-	Stdout, Stderr    Evidence
-	Settled           bool
+	// ProcessError preserves an ordinary start/wait error or cancellation cause.
+	// It is cleared for descendant/cleanup failures, which are not ordinary exits.
+	ProcessError   error
+	Stdout, Stderr Evidence
+	Settled        bool
 }
 
 type Runner struct {
@@ -109,6 +112,7 @@ func (r *Runner) Run(ctx context.Context, c Command) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		result.Status = Cancelled
 		result.Error = err.Error()
+		result.ProcessError = err
 		result.Finished = time.Now()
 		return result, nil //nolint:nilerr // cancellation is a terminal execution result, not invalid input.
 	}

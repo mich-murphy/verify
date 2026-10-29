@@ -1,55 +1,97 @@
-# Gate → Verify rename
+# Simplification and battle testing — accepted locally
 
-## Checkout and scope
+## Checkout and authority
 
-- Active public repository: `mich-murphy/verify`, task base
-  `5969353d0b808228eccad0fed8911ee7ea145032`; initially clean.
-- The preserved private Gate checkout remains unchanged.
-- User requested a project rename: product Verify, executable `verify`, config `verify.yaml`,
-  `VERIFY_*` environment, `verify.*` version-1 records, git-common-dir `verify/` state and
-  `verify/verified` status. Module/remote already use `github.com/mich-murphy/verify`.
-- Integrations, examples, build commands and spec terminology updated without policy changes.
-  No aliases or automatic state migration; README documents the manual transition.
-- User subsequently authorized commit and push. Delivery uses the `rename-gate-to-verify`
-  branch in a single-layer `gh stack` based on `main`, with a review PR; no merge.
-- No history rewrite, global install, user config or GitHub protection changes.
+- Active checkout `/Users/mm/dev/verify`, branch `rename-gate-to-verify`, starting and current HEAD
+  `ee4777d4286193416d80b2c145d4e9b3505ba224`. Starting tree was clean; task changes are uncommitted.
+- Private `/Users/mm/dev/gate` preserved. No commits, pushes, history changes, global installation,
+  live model calls, real shipping, reference-repository edits or SPEC changes.
+- User requested justified structures/simplicity, adversarial core testing and measured dependable
+  performance; all workers used `openai/gpt-6.1-sol`, medium effort. Parent owns acceptance.
 
-## Ownership and decisions
+## Ownership
 
-- Parent owns acceptance and all files. Worker `f0ee8233-0751-4bf` completed implementation,
-  tests and integrations and explicitly released ownership. No active workers.
-- `verify verify` preserves the scenario subcommand; no unrelated command redesign.
-- Internal test helper `runCLI` avoids collision with the existing `internal/verify` import.
-- Formatting inventory now includes new untracked Go files and skips missing tracked paths,
-  allowing checks before staging renames. A regression covers renamed/new/deleted/ignored files.
+All workers completed and released ownership; parent now owns all changed files.
 
-## Verification and acceptance
+- `bad69842-ac25-41a`: state/evidence/review/ship inventory, identity/projection and gh lifecycle fixes.
+- `8d5b9d3f-32f6-458`: execution/path/guard inventory, Git lifecycle migration and worktree quarantine.
+- `a9a40eba-be4e-49c`: config/audit/onboarding/CLI inventory, quoting/flags, CI duplicate removal.
+- `41507980-8764-486`: independent read-only correctness review, including parent correction follow-up.
+- `0e05d931-b111-41d`: measured runner/gitx performance correction.
+- `4897ee78-eab8-494`: independent read-only performance/safety review.
+- `5eeea843-ae53-4cc`: serialized final qualification, Linux environment, durable report and STATUS.
 
-Accepted locally against task-base plus the uncommitted rename:
+Expired worker sessions were replaced only after ownership release; retained reports supplied context.
+Steering unexpectedly aborted some early worker turns; explicit resumes reconciled corrections.
 
-- Worker: `go test -race -count=1 ./internal/... ./cmd/verify/...` passed all 18 packages;
-  `go test -race -count=1 ./cmd/verify` passed after the inventory regression.
-- Worker: installed-Pi `node --test integrations/pi/verify.test.cjs` with `PI_PACKAGE` set
-  passed one test with no skips; scoped golangci-lint reported zero issues.
-- Parent: `make check`, `make fmt-check`, `make build` and `git diff --check` passed.
-  Coverage 85.5%, unchanged 80% total / 70% package floors.
-- Parent: built binary root help, all nine JSON help commands, structured invalid-flag output
-  and agent-hook blocks for config writes/hook bypass passed.
-- Parent compared 55 production/integration files with the expected terminology-only transform;
-  all matched. SPEC comparison also confirmed terminology-only changes. Remaining old-name
-  references are migration guidance, negative fixtures or unrelated ordinary words.
-- Full gate log: `/tmp/verify-rename-make-check.log`. No live reviewer or remote-CI run.
+## Accepted changes and corrections
 
-## Risk and recovery
+- Inventory reconciled 17 internal packages, 51 production Go files and 84 named types. Ordered
+  slices, transient identity maps, strict raw records, provenance, locking and quarantine remain
+  justified. No new dependency/framework/cache/database/schema; no arbitrary LOC target.
+- Fixes: immutable finding identity versus disposition; effective PR findings; Git quoted/binary/mode
+  and trailing-whitespace paths; unique deleted-test IDs; precise truncated contains assertion;
+  audit flag boundaries; safe onboarding arguments; supported YML hook protection.
+- Parent caught an intermediate FileAt regression: nonregular policy must not become absent.
+  ErrNonRegularFile now propagates for config; only generated-header inspection intentionally skips it.
+  Actual trusted/candidate policy regressions and generated regular→symlink protection pass.
+- Real fake-process experiments proved gh/local Git/remote Git descendant-pipe hangs and unbounded
+  remote capture. Shared runner now handles bounded output, cancellation, exit distinctions and
+  settlement. Sticky Git quarantine blocks later execution/destructive fallback; check/verify consult
+  settlement at marker release. Parent caught gh overflow falling through to PR creation; unusable
+  view output now stops orchestration, with invocation-log regressions.
+- Simplification removes duplicate subprocess/capture paths, duplicate CI race-test execution and
+  unused CLI arguments. CI retains race/shuffle/uncached coverage, unchanged 80/70 floors and cached
+  local hooks. Direct FileAt reads eliminate redundant resolution/metadata subprocesses.
 
-Old executable/config/environment/status names no longer work with Verify. Existing Gate state
-is retained, not imported as Verify evidence. Update config, agent activation and required
-GitHub status explicitly, then regenerate evidence without evading prior budgets or findings.
-Settle interrupted Gate processes before switching; never delete a quarantine marker blindly.
-Revert the rename commit to return to Gate; no existing state was modified or removed.
+## Measured performance acceptance
 
-## Next action
+Initial hardening regressed controlled CLI overhead by >2×; parent rejected it. Focused correction
+skips process-table scans only when the OS probe returns ESRCH; all other results preserve bounded
+inspection, zombie handling and error/quarantine behavior. No lifecycle check was removed.
 
-Commit and push the accepted rename, open its review PR, and watch the actual GitHub CI run.
-Global installation, integration activation, merging and branch-protection updates remain
-explicit follow-up actions.
+Same-window median warm check seconds (3 samples; baseline / hardened-before-optimization / final):
+- 1 changed file: .5306 / 1.3177 / .4278.
+- 10 changed files: .9019 / 2.3970 / .6598.
+- 100 changed files: 4.6818 / 13.3119 / 2.9347.
+
+Real Git, controlled fake prek/probe, fresh/reused disposable worktrees; not real tool/model/network
+latency or cold OS caches. Independent final 100-file rerun: 2.9565s median. Final binary is byte-
+identical to the measured fixed binary. No universal latency guarantee inferred.
+
+## Final evidence and acceptance
+
+Parent inspected production diffs, new regression contracts, independent reviews, measurements and
+final gate results. Worker completion was not acceptance; the corrections above were inspected and
+retested. Parent accepts this scoped local simplification/hardening pass, not exhaustive correctness.
+
+Final-source worker verification (serialized, bounded, source manifests stable):
+- `make check` passed before and after report updates; final post-doc run 7.37s.
+- `go test -race -shuffle=on -count=1 -timeout=180s ./...`: all 18 packages passed on macOS arm64.
+- Five focused race repeats include new FileAt/process-group/probe/cleanup tests; passed.
+- Installed-Pi harness: 1 pass, 0 skips, no model call. Coverage 86.4%, unchanged 80/70 floors.
+- Four bounded fuzz campaigns and eleven core benchmark packages; runner/gitx refreshed after
+  performance correction, unaffected evidence reconciled against unchanged source.
+- Offline Linux arm64: all 18 test binaries passed, CGO_ENABLED=0/no race, no exclusions. Initial
+  attempt lacked Go for corpus oracles; corrected using checksum-verified official Go 1.27.3 mounted
+  read-only. Existing image only, no pulls/container network/credential mounts or global install.
+- Parent independently reran `make check` and `git diff --check` after accepting the report;
+  both passed. Log: `/tmp/verify-battle-review/parent-final-make-check.log`.
+
+Durable report: `docs/battle-testing.md`; short update: `STATUS.md`.
+Detailed logs, before/after failures, source/binary hashes and fixtures:
+`/tmp/verify-battle-review/` (especially `qualification/phase2-*` and `performance-fix/`).
+Temporary artifacts are local evidence, not permanent public links.
+
+## Limits and next action
+
+No live reviewer accuracy, real shipping, remote CI, real dependency-install workload, Linux race,
+other CPU architectures or cold filesystem-cache claim. Remaining source-review hypotheses are
+listed in the durable report, not represented as executed failures or resolved guarantees.
+No further implementation work assigned. User approved plain publication: one cohesive child commit
+on `simplify-and-battle-test`, stacked over the still-open rename PR #1; no merge or Verify ship.
+Publication worker owns this brief only; source remains frozen to the accepted qualification manifest.
+Publication preflight `make check` and `git diff --check` passed; accepted source hashes still match.
+Normal commit/push hooks remain enabled. Remote CI is pending publication, not yet approved. On interrupted ownership, inspect/stop survivors before removing a marker;
+never clear quarantine merely to retry. Reverting lifecycle work requires coordinated runner/gitx/
+check/verify changes; the small performance correction is independently reversible.

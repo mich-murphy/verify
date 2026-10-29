@@ -121,9 +121,7 @@ var (
 	// unusedDirectives matches the linter settings that make an unused
 	// disable directive an error (oxlint, eslint, biome).
 	unusedDirectives = regexp.MustCompile(`(?i)reportUnusedDisableDirectives["']?\s*:\s*["']?(error|2)\b|noUnusedSuppressions|suppressions/unused`)
-	// unusedFlag is the same setting given on the lint script's command line.
-	unusedFlag    = regexp.MustCompile(`--report-unused-disable-directives(-severity[= ]error)?\b`)
-	linterConfigs = []string{".oxlintrc.json", "oxlint.json", "eslint.config.js", "eslint.config.mjs", "eslint.config.ts", "eslint.config.cjs", "biome.json", "biome.jsonc"}
+	linterConfigs    = []string{".oxlintrc.json", "oxlint.json", "eslint.config.js", "eslint.config.mjs", "eslint.config.ts", "eslint.config.cjs", "biome.json", "biome.jsonc"}
 )
 
 // lockProblem checks the lockfile and exact tool versions of project dir d.
@@ -172,10 +170,32 @@ func (a *auditor) tsFiles(d string) {
 	}
 	// The flag on the project's own `lint` script counts too; this reads that
 	// one script's text, it does not expand what it calls.
-	if p, err := pkgmgr.ReadPackage(filepath.Join(a.dir, d)); err == nil && p != nil && unusedFlag.MatchString(p.Scripts["lint"]) {
+	if p, err := pkgmgr.ReadPackage(filepath.Join(a.dir, d)); err == nil && p != nil && unusedScriptFlag(p.Scripts["lint"]) {
 		unused = true
 	}
 	a.add("lint-unused-directives", Required, problemIf(!unused, "no linter config reports unused disable directives as errors"),
 		`oxlint: "options": {"reportUnusedDisableDirectives": "error"} in .oxlintrc.json; eslint: linterOptions.reportUnusedDisableDirectives: "error"; biome: suppressions/unused`)
 	a.add("lockfile", Required, a.lockProblem(d), "commit the package manager lockfile and pin devDependencies to exact versions (or set packageManager)")
+}
+
+// unusedScriptFlag recognizes complete whitespace-delimited flags, not prefixes.
+// Later settings override earlier ones. This is deliberately not a shell parser.
+func unusedScriptFlag(script string) bool {
+	words := strings.Fields(script)
+	enabled := false
+	for i := 0; i < len(words); i++ {
+		arg := words[i]
+		switch {
+		case arg == "--report-unused-disable-directives":
+			enabled = true
+		case arg == "--report-unused-disable-directives-severity":
+			enabled = i+1 < len(words) && words[i+1] == "error"
+			i++
+		case strings.HasPrefix(arg, "--report-unused-disable-directives-severity="):
+			enabled = arg == "--report-unused-disable-directives-severity=error"
+		case strings.HasPrefix(arg, "--report-unused-disable-directives="):
+			enabled = false
+		}
+	}
+	return enabled
 }

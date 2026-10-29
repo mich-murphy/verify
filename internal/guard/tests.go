@@ -34,13 +34,14 @@ func countDecls(lines []gitx.Line) map[string]int {
 
 func testsRemoved(d *gitx.LineDiff) []state.Finding {
 	var out []state.Finding
+	seen := map[string]bool{}
 	for _, p := range d.DeletedFiles {
-		if isTestFile(p) {
+		if isTestFile(p) && !seen[p] {
+			seen[p] = true
 			out = append(out, finding(TestsRemoved, p, 0, state.SeverityBlock, "test file deleted"))
 		}
 	}
 	added, removed := countDecls(d.Added), countDecls(d.Removed)
-	seen := map[string]bool{}
 	for _, l := range d.Removed {
 		if seen[l.Path] || removed[l.Path] <= added[l.Path] {
 			continue

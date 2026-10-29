@@ -133,3 +133,19 @@ func syncMarkerDir(marker string) error {
 	defer func() { _ = d.Close() }()
 	return d.Sync()
 }
+
+// ReleaseWorktreeUse releases an owned marker only when both repository commands
+// and Git cleanup settled. Git settlement is checked at release time under the
+// command lock, so a later failure cannot be cleared by an earlier observation.
+func (r *Repo) ReleaseWorktreeUse(release func() error, commandsSettled bool) error {
+	r.initCommandGate()
+	r.commandGate <- struct{}{}
+	defer func() { <-r.commandGate }()
+	if r.unsettled.Load() {
+		return ErrUnsettled
+	}
+	if !commandsSettled {
+		return nil
+	}
+	return release()
+}

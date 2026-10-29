@@ -105,3 +105,55 @@ func TestQualityRecipes(t *testing.T) {
 		}
 	}
 }
+
+// Inspect recipes without running their tools: CI must retain the complete
+// test contract while producing race and coverage evidence in one invocation.
+func TestQualityTestRunRecipes(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		args     []string
+		want     string
+		coverage bool
+	}{
+		{"ci", []string{"ci"}, "go test -race -shuffle=on -count=1 -coverprofile=coverage.out ./...", true},
+		{"cached hook coverage", []string{"cover", "TESTFLAGS="}, "go test -race -coverprofile=coverage.out ./...", true},
+		{"standalone test", []string{"test"}, "go test -race -shuffle=on -count=1 ./...", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"--no-print-directory", "-n", "-f", filepath.Join(root, "Makefile"), "GOFILES=sample.go"}, tc.args...)
+			cmd := exec.CommandContext(t.Context(), "make", args...) // #nosec G204 -- fixed dry-run recipe and repository Makefile
+			cmd.Dir = t.TempDir()
+			// Do not let a developer's optional recipe override change this fixture.
+			for _, entry := range os.Environ() {
+				if !strings.HasPrefix(entry, "TESTFLAGS=") && !strings.HasPrefix(entry, "MAKEFLAGS=") && !strings.HasPrefix(entry, "MFLAGS=") && !strings.HasPrefix(entry, "MAKEOVERRIDES=") {
+					cmd.Env = append(cmd.Env, entry)
+				}
+			}
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("dry-run: %v\n%s", err, out)
+			}
+			var runs []string
+			gate := false
+			for _, line := range strings.Split(string(out), "\n") {
+				line = strings.Join(strings.Fields(line), " ")
+				if strings.HasPrefix(line, "go test ") {
+					runs = append(runs, line)
+				}
+				if strings.Contains(line, "go-test-coverage --config=.testcoverage.yml") {
+					gate = true
+				}
+			}
+			if len(runs) != 1 || runs[0] != tc.want {
+				t.Fatalf("test invocations %q, want exactly %q\n%s", runs, tc.want, out)
+			}
+			if gate != tc.coverage {
+				t.Fatalf("coverage gate=%v, want %v\n%s", gate, tc.coverage, out)
+			}
+		})
+	}
+}
