@@ -3,23 +3,24 @@
 package ship
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/mich-murphy/verify/internal/gitx"
+	"github.com/mich-murphy/verify/internal/runner"
 )
 
 const cmdTimeout = 2 * time.Minute
+
+var errGHUnusable = errors.New("gh result is unusable")
 
 // Step outcomes.
 const (
@@ -139,7 +140,10 @@ func prStep(ctx context.Context, o Options, rep *Report) (string, error) {
 		if jerr := json.Unmarshal(out, &pr); jerr != nil {
 			return "", fmt.Errorf("unreadable gh pr view output: %w", jerr)
 		}
+	} else if errors.Is(verr, errGHUnusable) {
+		return "", verr
 	}
+
 	if pr.State == "OPEN" && pr.Number > 0 {
 		if _, err := gh(ctx, o, "pr", "edit", fmt.Sprint(pr.Number), "--repo", "github.com/"+o.Target, "--body-file", bodyFile); err != nil {
 			return "", err
@@ -166,22 +170,41 @@ func statusStep(ctx context.Context, o Options, _ *Report) (string, error) {
 }
 
 func gh(ctx context.Context, o Options, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, cmdTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- fixed executable; arguments are built by Verify.
-	cmd.Dir = o.Repo.Root
-	cmd.Env = append(os.Environ(), "GH_HOST=github.com", "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1")
-	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
+	env := make(map[string]string)
+	for _, kv := range os.Environ() {
+		key, value, ok := strings.Cut(kv, "=")
+		if ok {
+			env[key] = value
+		}
+	}
+	env["GH_HOST"] = "github.com"
+	env["GH_PROMPT_DISABLED"] = "1"
+	env["GH_NO_UPDATE_NOTIFIER"] = "1"
+	r, err := runner.New(runner.Config{Env: env})
+	if err != nil {
+		return nil, fmt.Errorf("gh %s: %w", args[0], err)
+	}
+	res, err := r.Run(ctx, runner.Command{Args: append([]string{"gh"}, args...), Dir: o.Repo.Root, Timeout: cmdTimeout})
+	if err != nil {
+		return nil, fmt.Errorf("gh %s: %w", args[0], err)
+	}
+	if !res.Settled {
+		return nil, fmt.Errorf("gh %s: %w: process group did not settle: %s", args[0], errGHUnusable, res.Error)
+	}
+	if res.Stdout.Truncated || res.Stderr.Truncated {
+		return nil, fmt.Errorf("gh %s: %w: output exceeded capture limit", args[0], errGHUnusable)
+	}
+	if res.Status == runner.Cancelled || res.Status == runner.TimedOut {
+		return nil, fmt.Errorf("gh %s: %w: %s", args[0], errGHUnusable, res.Error)
+	}
+	if res.Status != runner.Pass {
+		msg := strings.TrimSpace(res.Stderr.Output)
 		if msg == "" {
-			msg = err.Error()
+			msg = res.Error
 		}
 		return nil, errors.New("gh " + args[0] + ": " + msg)
 	}
-	return out.Bytes(), nil
+	return []byte(res.Stdout.Output), nil
 }
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)

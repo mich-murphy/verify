@@ -63,26 +63,6 @@ func TestRevisionRejectionIsValidationNotGitFailure(t *testing.T) {
 	}
 }
 
-func TestGitBufferExactBoundary(t *testing.T) {
-	var b limitedBuffer
-	const limit = 16 << 20
-	for _, chunk := range []string{strings.Repeat("x", limit-1), "y", "z"} {
-		n, err := b.Write([]byte(chunk))
-		if n != len(chunk) || err != nil {
-			t.Fatalf("write %d %v", n, err)
-		}
-		if b.buffer.Len() > limit {
-			t.Fatal("unbounded buffer")
-		}
-		if b.overflow != (chunk == "z") {
-			t.Fatalf("incorrect boundary overflow after %q", chunk[len(chunk)-1:])
-		}
-	}
-	if b.buffer.Len() != limit || !strings.HasSuffix(b.String(), "xy") {
-		t.Fatal("prefix not retained")
-	}
-}
-
 func TestCommittedDirectoryAndMissingFileRejection(t *testing.T) {
 	repo, dir := fixture(t.Context(), t)
 	writeFile(t, filepath.Join(dir, "nested-file"), "file")

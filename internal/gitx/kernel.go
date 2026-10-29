@@ -56,7 +56,11 @@ func (r *Repo) Branch(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// FileAt reads a regular file at a revision; found is false when it does not exist there.
+// ErrNonRegularFile distinguishes an existing nonregular entry from an absent file.
+// Policy readers must fail closed; header-only inspectors may deliberately skip it.
+var ErrNonRegularFile = errors.New("path is not a regular committed file")
+
+// FileAt reads a regular file at a revision; only an absent entry returns no error with found=false.
 func (r *Repo) FileAt(ctx context.Context, revision, path string) (data []byte, found bool, err error) {
 	oid, err := r.Resolve(ctx, revision)
 	if err != nil {
@@ -72,7 +76,17 @@ func (r *Repo) FileAt(ctx context.Context, revision, path string) (data []byte, 
 	if len(meta) == 0 {
 		return nil, false, nil
 	}
-	data, err = r.ShowFile(ctx, oid, path)
+	// Never reinterpret an existing symlink/submodule/directory as absent policy.
+	entry := strings.SplitN(string(meta), "\t", 2)
+	if len(entry) != 2 || strings.TrimSuffix(entry[1], "\x00") != path {
+		return nil, false, errors.New("unparseable committed file metadata")
+	}
+	if !strings.HasPrefix(entry[0], "100") {
+		return nil, false, ErrNonRegularFile
+	}
+	// The immutable commit, exact path and regular-file metadata are validated
+	// above; do not resolve and inspect the same entry again through ShowFile.
+	data, err = r.run(ctx, "cat-file", "blob", oid+":"+path)
 	return data, err == nil, err
 }
 
@@ -98,7 +112,7 @@ func (r *Repo) ResetWorktree(ctx context.Context, path, sha string, keep []strin
 		return err
 	}
 	if !r.validWorktree(ctx, path) {
-		if err = os.RemoveAll(path); err != nil {
+		if err = r.removeWorktreePath(path); err != nil {
 			return err
 		}
 		if _, err = r.run(ctx, "worktree", "prune"); err != nil {
@@ -134,8 +148,8 @@ func (r *Repo) validWorktree(ctx context.Context, path string) bool {
 	if err != nil {
 		return false
 	}
-	topReal, err1 := filepath.EvalSymlinks(strings.TrimSpace(string(top)))
-	commonReal, err2 := filepath.EvalSymlinks(strings.TrimSpace(string(common)))
+	topReal, err1 := filepath.EvalSymlinks(strings.TrimSuffix(string(top), "\n"))
+	commonReal, err2 := filepath.EvalSymlinks(strings.TrimSuffix(string(common), "\n"))
 	return err1 == nil && err2 == nil && topReal == real && commonReal == r.CommonDir
 }
 
@@ -144,10 +158,24 @@ func (r *Repo) validWorktree(ctx context.Context, path string) bool {
 func (r *Repo) RemoveWorktree(ctx context.Context, path string) error {
 	_, err := r.run(ctx, "worktree", "remove", "--force", path)
 	if err != nil {
-		err = errors.Join(err, os.RemoveAll(path))
+		err = errors.Join(err, r.removeWorktreePath(path))
+		if !r.Settled() {
+			return errors.Join(err, ErrUnsettled)
+		}
 	}
 	_, perr := r.run(ctx, "worktree", "prune")
 	return errors.Join(err, perr)
+}
+
+// Keep cleanup admission and deletion atomic with respect to Git quarantine.
+func (r *Repo) removeWorktreePath(path string) error {
+	r.initCommandGate()
+	r.commandGate <- struct{}{}
+	defer func() { <-r.commandGate }()
+	if r.unsettled.Load() {
+		return ErrUnsettled
+	}
+	return os.RemoveAll(path)
 }
 
 func parentDir(p string) string {

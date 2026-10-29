@@ -71,9 +71,9 @@ func (m Manager) InstallIn(sub string) []string {
 // directory below the root ("" for the root itself).
 func (m Manager) RunScript(sub, name string) string {
 	if sub == "" {
-		return m.Run + " " + name
+		return m.Run + " " + QuoteArg(name)
 	}
-	return fmt.Sprintf(m.RunIn, sub, name)
+	return fmt.Sprintf(m.RunIn, QuoteArg(sub), QuoteArg(name))
 }
 
 // Nested finds the one immediate subdirectory of dir that holds a lockfile.
@@ -140,4 +140,12 @@ func Project(dir string) (sub string, m Manager) {
 		return sub, m
 	}
 	return "", Managers[0]
+}
+
+// QuoteArg quotes one argument for prek entry splitting and POSIX shells.
+func QuoteArg(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./:@%+=,-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

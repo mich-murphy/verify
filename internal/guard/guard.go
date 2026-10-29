@@ -11,6 +11,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -83,8 +84,16 @@ func Run(ctx context.Context, in Input) ([]state.Finding, error) {
 
 func generated(ctx context.Context, in Input, d *gitx.LineDiff) ([]state.Finding, error) {
 	var out []state.Finding
-	for _, p := range d.Modified {
+	seen := map[string]bool{}
+	for _, p := range append(append([]string(nil), d.Modified...), d.DeletedFiles...) {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
 		data, found, err := in.Repo.FileAt(ctx, in.Base, p)
+		if errors.Is(err, gitx.ErrNonRegularFile) {
+			continue // Nonregular base entries have no generated-file header.
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read %s at base: %w", p, err)
 		}

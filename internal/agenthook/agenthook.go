@@ -65,7 +65,7 @@ func Evaluate(r io.Reader) Verdict {
 }
 
 var protectedFiles = map[string]bool{
-	"verify.yaml": true, ".pre-commit-config.yaml": true, "prek.toml": true, "lefthook.yml": true,
+	"verify.yaml": true, ".pre-commit-config.yaml": true, ".pre-commit-config.yml": true, "prek.toml": true, "lefthook.yml": true,
 }
 
 // CheckPath returns a block reason when editing p would change hook or Verify config.

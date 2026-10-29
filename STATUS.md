@@ -58,6 +58,19 @@ The original regression remains, with added same-inode, repeat-release and symli
 A controlled Linux replay observed inode reuse on all 32 runs: the old code failed all 32,
 and the corrected code passed all 32 under the same conditions. No test or threshold was relaxed.
 
+## Battle qualification
+
+Final working-tree qualification passed `make check`, all 18 packages under uncached shuffled
+race testing, five focused race repetitions, and the installed-Pi harness (one pass, no skips).
+Coverage is **86.4%**, with unchanged 80/70 floors. All 18 package test binaries also passed
+in the isolated offline Linux arm64 image, **without race instrumentation** (CGO disabled).
+Four bounded fuzz runs and serialized core benchmarks are retained. A measured >2× CLI
+regression was corrected without removing lifecycle safeguards: controlled fake-tool warm check
+medians at 1/10/100 files were 0.428/0.660/2.935s, versus baseline 0.531/0.902/4.682s.
+These are orchestration measurements, not real hook/model/network latency. See
+[battle testing](docs/battle-testing.md) for inventory, evidence, recovery and limits.
+No live reviewer, real shipping or remote CI approval is claimed; parent acceptance remains separate.
+
 ## Deliberate limits
 
 Verify is not a hostile-code sandbox, an autonomous repair agent or a CI/merge/deploy service.

@@ -14,6 +14,7 @@ import (
 
 func TestOSBoundaryInspectionFailureQuarantines(t *testing.T) {
 	r := testRunner(t, Config{SettleTimeout: 20 * time.Millisecond})
+	r.process.probe = func(int) error { return nil }
 	r.process.table = func(context.Context) ([]byte, error) { return nil, errors.New("inspection unavailable") }
 	got := runCommand(t, r, helperTask(t, "ok"))
 	if got.Status != Fail || got.Settled || !strings.Contains(got.Error, "inspection unavailable") {
@@ -94,6 +95,7 @@ func TestUnrelatedProcessSurvivesTimeout(t *testing.T) {
 func TestBoundedGroupInspectionAndPolling(t *testing.T) {
 	r := testRunner(t, Config{KillGrace: 20 * time.Millisecond, SettleTimeout: 100 * time.Millisecond})
 	sentinel := errors.New("inspection rejected")
+	r.process.probe = func(int) error { return nil }
 	r.process.table = func(context.Context) ([]byte, error) { return nil, sentinel }
 	if err := r.settle(t.Context(), 42); !errors.Is(err, sentinel) {
 		t.Fatal(err)
@@ -101,6 +103,7 @@ func TestBoundedGroupInspectionAndPolling(t *testing.T) {
 	queries := 0
 	start := time.Now()
 	r.process.signal = func(_ int, _ syscall.Signal) error { return nil }
+	r.process.probe = func(int) error { return nil }
 	r.process.table = func(context.Context) ([]byte, error) {
 		queries++
 		if queries > 15 {

@@ -67,6 +67,9 @@ func Evaluate(in Input) Result {
 		}
 	}
 	gaps := e.checkGaps()
+	if err := findingConflict(in.Review, in.Branch); err != nil && in.Review.SHA == in.SHA && in.Review.MergeBase == in.MergeBase && in.Review.Branch == in.Branch.Name {
+		gaps = append(gaps, gap{err.Error(), "inspect and regenerate inconsistent review state"})
+	}
 	if in.Check.Lane != laneDocs {
 		gaps = append(gaps, e.reviewGaps()...)
 		gaps = append(gaps, e.verifyGaps()...)
@@ -106,20 +109,8 @@ func AssessCheck(chk *state.CheckRecord, decisions []state.Decision, sha string)
 	if chk == nil {
 		return out
 	}
-	covered := func(f state.Finding) bool {
-		kind := ""
-		switch f.Source {
-		case state.SourceGuard:
-			kind = state.DecideAccept
-		case state.SourceSetup:
-			kind = state.DecideWaive
-		default:
-			return false
-		}
-		return slices.ContainsFunc(decisions, func(d state.Decision) bool { return d.SHA == sha && d.Kind == kind && d.Target == f.ID })
-	}
 	for _, f := range chk.Findings {
-		if f.Blocking() && !covered(f) {
+		if f.Blocking() && ((f.Source != state.SourceGuard && f.Source != state.SourceSetup) || !decisionCovers(f, decisions, sha)) {
 			out.Blocking = append(out.Blocking, f)
 			out.Passing = false
 		}
@@ -142,13 +133,7 @@ func AssessCheck(chk *state.CheckRecord, decisions []state.Decision, sha string)
 // covered reports whether a decision on this SHA covers the check finding.
 // check:<step> findings can never be covered.
 func (e *evaluator) covered(f state.Finding) bool {
-	switch f.Source {
-	case state.SourceGuard, state.SourceReview:
-		return e.has(state.DecideAccept, f.ID)
-	case state.SourceSetup:
-		return e.has(state.DecideWaive, f.ID)
-	}
-	return false
+	return decisionCovers(f, e.decisions, e.in.SHA)
 }
 
 func (e *evaluator) checkGaps() []gap {
@@ -188,9 +173,18 @@ func Findings(chk *state.CheckRecord, rev *state.ReviewRecord, ver *state.Verify
 		out = append(out, ver.Findings...)
 	}
 	known := map[string]bool{}
+	raw := map[string]state.Finding{}
+	if rev != nil {
+		for _, f := range rev.Findings {
+			raw[f.ID] = f
+		}
+	}
 	if br != nil {
 		for _, f := range br.Findings {
 			known[f.ID] = true
+			if original, ok := raw[f.ID]; ok {
+				f = projectDisposition(original, f)
+			}
 			out = append(out, f)
 		}
 	}
@@ -201,6 +195,7 @@ func Findings(chk *state.CheckRecord, rev *state.ReviewRecord, ver *state.Verify
 			}
 		}
 	}
+
 	return out
 }
 
@@ -282,4 +277,67 @@ func (e *evaluator) approvalGaps() []gap {
 		return []gap{{"signoff: no approve decision for this commit", act}}
 	}
 	return nil
+}
+
+func projectDisposition(original, current state.Finding) state.Finding {
+	if sameIdentity(original, current) {
+		original.State = current.State
+	} else {
+		original.State = state.StateOpen
+	}
+	return original
+}
+
+// sameIdentity excludes only mutable disposition; all review claim facts remain immutable.
+func sameIdentity(a, b state.Finding) bool {
+	if a.ID != b.ID || a.Source != b.Source || a.Rule != b.Rule || a.Severity != b.Severity || a.Path != b.Path || a.Line != b.Line || a.Message != b.Message {
+		return false
+	}
+	if a.Repro == nil || b.Repro == nil {
+		return a.Repro == nil && b.Repro == nil
+	}
+	return *a.Repro == *b.Repro
+}
+
+func findingConflict(rev *state.ReviewRecord, br *state.Branch) error {
+	if rev == nil || br == nil {
+		return nil
+	}
+	byID := make(map[string]state.Finding, len(rev.Findings))
+	for _, f := range rev.Findings {
+		byID[f.ID] = f
+	}
+	for _, f := range br.Findings {
+		if original, ok := byID[f.ID]; ok && !sameIdentity(original, f) {
+			return fmt.Errorf("corrupt review state: finding %s has conflicting immutable identity in branch and review records", f.ID)
+		}
+	}
+	return nil
+}
+
+func decisionCovers(f state.Finding, decisions []state.Decision, sha string) bool {
+	kind := ""
+	switch f.Source {
+	case state.SourceGuard, state.SourceReview:
+		kind = state.DecideAccept
+	case state.SourceSetup:
+		kind = state.DecideWaive
+	default:
+		return false
+	}
+	return slices.ContainsFunc(decisions, func(d state.Decision) bool { return d.SHA == sha && d.Kind == kind && d.Target == f.ID })
+}
+
+// EffectiveFindings projects decisions onto presentation copies, never raw records.
+func EffectiveFindings(chk *state.CheckRecord, rev *state.ReviewRecord, ver *state.VerifyRecord, br *state.Branch, sha string) []state.Finding {
+	out := Findings(chk, rev, ver, br)
+	if br == nil {
+		return out
+	}
+	for i, f := range out {
+		if f.State == state.StateOpen && decisionCovers(f, br.Decisions, sha) {
+			out[i].State = state.StateAccepted
+		}
+	}
+	return out
 }

@@ -29,9 +29,9 @@ tidy-check:
 test:
 	go test -race -shuffle=on -count=1 ./...
 
-# CI runs cover uncached; the pre-push hook passes TESTFLAGS= so Go's test cache
-# applies (SPEC §4.5 full-tier rules).
-TESTFLAGS ?= -count=1
+# CI uses one shuffled, uncached race+coverage run. The pre-push hook passes
+# TESTFLAGS= so Go's test cache applies (SPEC §4.5 full-tier rules).
+TESTFLAGS ?= -shuffle=on -count=1
 
 cover:
 	go test -race $(TESTFLAGS) -coverprofile=coverage.out ./...
@@ -59,4 +59,4 @@ check:
 	prek run --all-files --stage pre-push
 
 # CI entry point: same targets, no prek.
-ci: fmt-check tidy-check lint secrets actionlint vet test cover deadcode vuln
+ci: fmt-check tidy-check lint secrets actionlint vet cover deadcode vuln

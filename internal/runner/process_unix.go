@@ -17,12 +17,17 @@ import (
 // processOps is an instance-local OS boundary. New always installs real operations;
 // tests may replace an instance before use, never shared package-global functions.
 type processOps struct {
+	probe  func(int) error
 	signal func(int, syscall.Signal) error
 	table  func(context.Context) ([]byte, error)
 }
 
 func realProcessOps() processOps {
-	return processOps{signal: signalGroup, table: processTable}
+	return processOps{
+		probe:  func(group int) error { return syscall.Kill(-group, 0) },
+		signal: signalGroup,
+		table:  processTable,
+	}
 }
 
 func processTable(ctx context.Context) ([]byte, error) {
@@ -32,6 +37,11 @@ func processTable(ctx context.Context) ([]byte, error) {
 }
 
 func (r *Runner) groupAlive(ctx context.Context, group int) (bool, error) {
+	// Only ESRCH proves absence. Success (including zombie-only groups), EPERM,
+	// and all other probe errors still require the existing bounded inspection.
+	if errors.Is(r.process.probe(group), syscall.ESRCH) {
+		return false, nil
+	}
 	return inspectGroup(ctx, group, r.process.table)
 }
 
@@ -67,17 +77,17 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 	reaped := true
 	select {
 	case err = <-waited:
+		result.ProcessError = err
 		result.Status = Pass
 		if err != nil {
 			result.Status = Fail
 			result.Error = err.Error()
 		}
-	case <-ctx.Done():
-		result.Status = Cancelled
-		if parent.Err() == nil {
-			result.Status = TimedOut
+		if ctx.Err() != nil {
+			result = cancelledResult(ctx, parent, result)
 		}
-		result.Error = ctx.Err().Error()
+	case <-ctx.Done():
+		result = cancelledResult(ctx, parent, result)
 		var stopErr error
 		reaped, stopErr = r.stopAndWait(ctx, cmd.Process.Pid, waited)
 		if stopErr != nil {
@@ -95,6 +105,8 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 	defer cleanupCancel()
 	alive, checkErr := r.groupAlive(cleanupCtx, cmd.Process.Pid)
 	if alive || checkErr != nil {
+		// Even a real exit 1 cannot stand in for lifecycle failure.
+		result.ProcessError = nil
 		if result.Status == Pass {
 			result.Status = Fail
 			result.Error = "command exited before owned descendants settled"
@@ -111,9 +123,22 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 	return result
 }
 
+// A completed wait can race caller cancellation. Preserve cancellation identity
+// without exposing a normal exit code as affirmative/negative Git evidence.
+func cancelledResult(ctx, parent context.Context, result Result) Result {
+	result.Status = Cancelled
+	if parent.Err() == nil {
+		result.Status = TimedOut
+	}
+	result.Error = ctx.Err().Error()
+	result.ProcessError = ctx.Err()
+	return result
+}
+
 func executionError(result Result, err error) Result {
 	result.Status = Fail
 	result.Error = err.Error()
+	result.ProcessError = err
 	result.Finished = time.Now()
 	return result
 }

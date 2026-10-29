@@ -290,7 +290,7 @@ func starterEntry(entry string, ok bool, d def, pkg *pkgmgr.Package, m pkgmgr.Ma
 		res.Notes = append(res.Notes, fmt.Sprintf("no %s hook written: %s is not a declared dependency, so `npx` would fetch an unrelated package; add a %s hook running %q once it is", id, d.tool, stage, d.starter))
 		return "", false, false
 	case sub != "":
-		return fmt.Sprintf("sh -c 'cd %s && %s %s'", sub, m.Exec, d.starter), false, true
+		return "sh -c " + pkgmgr.QuoteArg("cd "+pkgmgr.QuoteArg(sub)+" && "+m.Exec+" "+d.starter), false, true
 	default:
 		return m.Exec + " " + d.starter, d.filenames, true
 	}

@@ -97,6 +97,9 @@ func ParseLineDiff(text string) (*LineDiff, error) {
 			flush()
 			inFile, oldPath, newPath, isNew, isDel = true, "", "", false, false
 			headPath = headerPath(line[len("diff --git "):])
+			if headPath == "" {
+				return nil, errors.New("unparseable git diff file header")
+			}
 		case strings.HasPrefix(line, "new file mode"):
 			isNew = true
 		case strings.HasPrefix(line, "deleted file mode"):
@@ -120,12 +123,15 @@ func diffPath(s, prefix string) string {
 	if s == "/dev/null" {
 		return ""
 	}
+	// Git appends a literal tab after unquoted paths containing spaces. Remove
+	// that delimiter before decoding, never a tab belonging to a quoted name.
+	s = strings.TrimSuffix(s, "\t")
 	if strings.HasPrefix(s, `"`) {
 		if u, err := strconv.Unquote(s); err == nil {
 			s = u
 		}
 	}
-	return strings.TrimPrefix(strings.TrimSuffix(s, "\t"), prefix)
+	return strings.TrimPrefix(s, prefix)
 }
 
 // parseHunk reads "@@ -a[,b] +c[,d] @@". With unified=0 a zero count means the
@@ -154,8 +160,31 @@ func rangeOf(s string) (start, count int, err error) {
 	return start, count, err
 }
 
-// headerPath extracts the path from "a/P b/P"; "" when ambiguous or quoted.
+// headerPath extracts the identical old/new path from a no-renames header.
 func headerPath(h string) string {
+	if strings.HasPrefix(h, `"`) {
+		// Git C-quotes both paths when either needs quoting. Find the closing
+		// quote while respecting escaped backslashes and escaped quotes.
+		for i := 1; i < len(h); i++ {
+			if h[i] == '\\' {
+				i++
+				continue
+			}
+			if h[i] != '"' {
+				continue
+			}
+			old, err := strconv.Unquote(h[:i+1])
+			if err != nil || i+2 >= len(h) || h[i+1] != ' ' {
+				return ""
+			}
+			newPath, err := strconv.Unquote(h[i+2:])
+			if err != nil || !strings.HasPrefix(old, "a/") || newPath != "b/"+old[2:] {
+				return ""
+			}
+			return old[2:]
+		}
+		return ""
+	}
 	n := (len(h) - len("a/ b/")) / 2
 	if n <= 0 || len(h) != 2*n+len("a/ b/") {
 		return ""
