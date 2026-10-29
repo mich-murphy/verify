@@ -4,10 +4,10 @@ import "time"
 
 // Schema identifiers. Every schema is version 1 and there are no migrations.
 const (
-	SchemaBranch = "gate.branch/1"
-	SchemaCheck  = "gate.check/1"
-	SchemaReview = "gate.review/1"
-	SchemaVerify = "gate.verify/1"
+	SchemaBranch = "verify.branch/1"
+	SchemaCheck  = "verify.check/1"
+	SchemaReview = "verify.review/1"
+	SchemaVerify = "verify.verify/1"
 )
 
 // Finding sources, severities and states.
@@ -32,7 +32,7 @@ type Repro struct {
 	Expected string `json:"expected"`
 }
 
-// Finding is the shared shape for everything Gate reports.
+// Finding is the shared shape for everything Verify reports.
 type Finding struct {
 	ID       string `json:"id"`
 	Source   string `json:"source"`
@@ -82,7 +82,7 @@ type Decision struct {
 	Time   time.Time `json:"time"`
 }
 
-// Branch is gate.branch/1: per-branch review state.
+// Branch is verify.branch/1: per-branch review state.
 type Branch struct {
 	Schema          string     `json:"schema"`
 	Name            string     `json:"name"`
@@ -94,7 +94,7 @@ type Branch struct {
 	Decisions       []Decision `json:"decisions"`
 }
 
-// CheckRecord is gate.check/1.
+// CheckRecord is verify.check/1.
 type CheckRecord struct {
 	Schema        string    `json:"schema"`
 	SHA           string    `json:"sha"`
@@ -111,7 +111,7 @@ type CheckRecord struct {
 	Finished      time.Time `json:"finished"`
 }
 
-// ReviewRecord is gate.review/1.
+// ReviewRecord is verify.review/1.
 type ReviewRecord struct {
 	Schema    string    `json:"schema"`
 	SHA       string    `json:"sha"`
@@ -135,7 +135,7 @@ type ScenarioResult struct {
 	Detail   string `json:"detail,omitempty"`
 }
 
-// VerifyRecord is gate.verify/1.
+// VerifyRecord is verify.verify/1.
 type VerifyRecord struct {
 	Schema    string           `json:"schema"`
 	SHA       string           `json:"sha"`

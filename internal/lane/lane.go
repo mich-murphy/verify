@@ -35,7 +35,7 @@ var lockfiles = map[string]bool{
 }
 
 var qualityBases = []string{
-	"gate.yaml", ".pre-commit-config.yaml", ".pre-commit-config.yml", "prek.toml", ".golangci.yml", ".golangci.yaml",
+	"verify.yaml", ".pre-commit-config.yaml", ".pre-commit-config.yml", "prek.toml", ".golangci.yml", ".golangci.yaml",
 	".golangci.toml", ".golangci.json", ".testcoverage.yml", ".testcoverage.yaml", ".eslintrc",
 	".oxlintrc.json", "oxlint.json", "biome.json", "biome.jsonc", ".prettierrc", ".editorconfig",
 	"deno.json", "knip.json", "knip.jsonc", ".fallowrc.json", "tox.ini", "ruff.toml", ".ruff.toml",
@@ -55,7 +55,7 @@ func IsDocs(p string) bool {
 	return strings.HasSuffix(p, ".md") || p == "docs" || strings.HasPrefix(p, "docs/") || strings.HasPrefix(base, "CHANGELOG")
 }
 
-// IsQualityConfig reports whether a path is gate, prek, lint, format, type,
+// IsQualityConfig reports whether a path is verify, prek, lint, format, type,
 // coverage or CI configuration.
 func IsQualityConfig(p string) bool {
 	if strings.HasPrefix(p, ".github/workflows/") {
@@ -75,7 +75,7 @@ func IsQualityConfig(p string) bool {
 	return false
 }
 
-// Compute returns the lane. configFromCandidate means gate.yaml was absent or invalid at
+// Compute returns the lane. configFromCandidate means verify.yaml was absent or invalid at
 // the merge-base, so the candidate's own copy governs and must be signed off.
 func Compute(changes []Change, cfg config.Config, configFromCandidate bool) Result {
 	var reasons []string
@@ -95,7 +95,7 @@ func Compute(changes []Change, cfg config.Config, configFromCandidate bool) Resu
 		}
 	}
 	if configFromCandidate {
-		reasons = append(reasons, "gate.yaml absent or invalid at merge-base; candidate copy used")
+		reasons = append(reasons, "verify.yaml absent or invalid at merge-base; candidate copy used")
 	}
 	if lines > config.SignoffLines {
 		reasons = append(reasons, "diff exceeds 400 changed lines")

@@ -1,8 +1,8 @@
 verify:
   surfaces: ["cmd/**", "internal/cli/**"]
-  setup: [go, build, -o, .gate-bin/gate, ./cmd/gate]
+  setup: [go, build, -o, .verify-bin/verify, ./cmd/verify]
   scenarios:
     - name: help
-      run: [.gate-bin/gate, --help]
+      run: [.verify-bin/verify, --help]
       exit: 0
       stdout_contains: "usage"

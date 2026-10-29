@@ -11,6 +11,37 @@ import (
 
 const sha = "0123456789abcdef0123456789abcdef01234567"
 
+func TestProductNamespace(t *testing.T) {
+	commonDir := t.TempDir()
+	if got := Open(commonDir).Dir; got != filepath.Join(commonDir, "verify") {
+		t.Fatalf("state directory %q", got)
+	}
+	for _, tc := range []struct{ got, want string }{
+		{SchemaBranch, "verify.branch/1"},
+		{SchemaCheck, "verify.check/1"},
+		{SchemaReview, "verify.review/1"},
+		{SchemaVerify, "verify.verify/1"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("schema %q, want %q", tc.got, tc.want)
+		}
+	}
+	legacy := &Store{Dir: filepath.Join(commonDir, "gate")}
+	if err := legacy.UpdateBranch("feature", func(b *Branch) error {
+		b.Parked = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Open(commonDir).LoadBranch("feature")
+	if err != nil || current.Parked {
+		t.Fatalf("legacy state must not be imported: %+v %v", current, err)
+	}
+	if _, err := os.Stat(legacy.BranchPath("feature")); err != nil {
+		t.Fatalf("legacy state must be retained: %v", err)
+	}
+}
+
 func TestCheckRoundTripAndFailClosed(t *testing.T) {
 	s := Open(t.TempDir())
 	now := time.Now().UTC()
@@ -24,12 +55,17 @@ func TestCheckRoundTripAndFailClosed(t *testing.T) {
 	}
 	d, _ := s.RunDir(sha)
 	p := filepath.Join(d, "check.json")
+	raw, err := os.ReadFile(p) // #nosec G304 -- test-owned state file
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, content := range map[string]string{
-		"garbage":  "{not json",
-		"unknown":  `{"schema":"gate.check/1","sha":"` + sha + `","zzz":1}`,
-		"schema":   `{"schema":"gate.check/2","sha":"` + sha + `"}`,
-		"trailing": `{"schema":"gate.check/1","sha":"` + sha + `"} {}`,
-		"wrongsha": `{"schema":"gate.check/1","sha":"abc"}`,
+		"legacy schema": strings.Replace(string(raw), "verify.check/1", "gate.check/1", 1),
+		"garbage":       "{not json",
+		"unknown":       `{"schema":"verify.check/1","sha":"` + sha + `","zzz":1}`,
+		"schema":        `{"schema":"verify.check/2","sha":"` + sha + `"}`,
+		"trailing":      `{"schema":"verify.check/1","sha":"` + sha + `"} {}`,
+		"wrongsha":      `{"schema":"verify.check/1","sha":"abc"}`,
 	} {
 		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 			t.Fatal(err)

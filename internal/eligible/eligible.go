@@ -56,7 +56,7 @@ func Evaluate(in Input) Result {
 	if in.Check == nil || in.Check.SHA != in.SHA || in.Check.MergeBase != in.MergeBase || in.Check.Lane != in.Lane {
 		return Result{
 			Missing:    []string{"check: no check record for this commit"},
-			NextAction: "run gate check",
+			NextAction: "run verify check",
 		}
 	}
 	e := &evaluator{in: in}
@@ -74,7 +74,7 @@ func Evaluate(in Input) Result {
 	gaps = append(gaps, e.approvalGaps()...)
 
 	e.res.Eligible = len(gaps) == 0
-	e.res.NextAction = "run gate ship"
+	e.res.NextAction = "run verify ship"
 	if len(gaps) > 0 {
 		e.res.NextAction = gaps[0].action
 	}
@@ -162,7 +162,7 @@ func (e *evaluator) checkGaps() []gap {
 		})
 	}
 	if !assessment.Passing && len(gaps) == 0 {
-		gaps = append(gaps, gap{"check: repository execution failed", "fix the checks, commit and run gate check"})
+		gaps = append(gaps, gap{"check: repository execution failed", "fix the checks, commit and run verify check"})
 	}
 	return gaps
 }
@@ -170,11 +170,11 @@ func (e *evaluator) checkGaps() []gap {
 func checkAction(f state.Finding) string {
 	switch f.Source {
 	case state.SourceGuard:
-		return fmt.Sprintf("fix %s, commit and run gate check, or run gate decide accept %s --reason TEXT", f.ID, f.ID)
+		return fmt.Sprintf("fix %s, commit and run verify check, or run verify decide accept %s --reason TEXT", f.ID, f.ID)
 	case state.SourceSetup:
-		return fmt.Sprintf("fix the setup, commit and run gate check, or run gate decide waive %s --reason TEXT", f.ID)
+		return fmt.Sprintf("fix the setup, commit and run verify check, or run verify decide waive %s --reason TEXT", f.ID)
 	}
-	return fmt.Sprintf("fix %s, commit and run gate check", f.ID)
+	return fmt.Sprintf("fix %s, commit and run verify check", f.ID)
 }
 
 // Findings projects current branch dispositions over immutable review evidence.
@@ -224,13 +224,13 @@ func (e *evaluator) reviewGaps() []gap {
 	// blocking review finding has been accepted.
 	parkedOK := e.in.Branch.Parked && e.approveAny()
 	if (e.in.Review == nil || e.in.Review.SHA != e.in.SHA || e.in.Review.MergeBase != e.in.MergeBase || e.in.Review.Branch != e.in.Branch.Name) && !parkedOK {
-		gaps = append(gaps, gap{"review: no review record for this commit", "run gate review"})
+		gaps = append(gaps, gap{"review: no review record for this commit", "run verify review"})
 	}
 	for _, f := range e.reviewBlocking() {
 		e.res.Blocking = append(e.res.Blocking, f)
-		action := fmt.Sprintf("fix %s, commit and run gate check", f.ID)
+		action := fmt.Sprintf("fix %s, commit and run verify check", f.ID)
 		if e.in.Branch.Parked {
-			action = fmt.Sprintf("run gate decide accept %s --reason TEXT", f.ID)
+			action = fmt.Sprintf("run verify decide accept %s --reason TEXT", f.ID)
 		}
 		gaps = append(gaps, gap{fmt.Sprintf("review: blocking finding %s: %s", f.ID, f.Message), action})
 	}
@@ -252,29 +252,29 @@ func (e *evaluator) verifyGaps() []gap {
 	}
 	v := e.in.Verify
 	if v == nil || v.SHA != e.in.SHA || v.MergeBase != e.in.MergeBase {
-		return []gap{{"verify: a declared surface changed and no verify record exists", "run gate verify"}}
+		return []gap{{"verify: a declared surface changed and no verify record exists", "run verify verify"}}
 	}
 	switch v.Verdict {
 	case "go":
 		return nil
 	case "no-surface":
-		return []gap{{"verify: surface changed but record says no-surface", "run gate verify"}}
+		return []gap{{"verify: surface changed but record says no-surface", "run verify verify"}}
 	case "no-go":
-		return []gap{{"verify: verdict no-go", "fix the failing scenarios, commit and run gate check"}}
+		return []gap{{"verify: verdict no-go", "fix the failing scenarios, commit and run verify check"}}
 	case "inconclusive":
 		if e.has(state.DecideWaive, "verify") {
 			return nil
 		}
-		return []gap{{"verify: verdict inconclusive", "fix the verify setup and run gate verify, or run gate decide waive verify --reason TEXT"}}
+		return []gap{{"verify: verdict inconclusive", "fix the verify setup and run verify verify, or run verify decide waive verify --reason TEXT"}}
 	}
-	return []gap{{fmt.Sprintf("verify: unknown verdict %q", v.Verdict), "run gate verify"}}
+	return []gap{{fmt.Sprintf("verify: unknown verdict %q", v.Verdict), "run verify verify"}}
 }
 
 func (e *evaluator) approvalGaps() []gap {
 	if e.approveAny() {
 		return nil
 	}
-	const act = "run gate decide approve --reason TEXT"
+	const act = "run verify decide approve --reason TEXT"
 	switch {
 	case e.in.Branch.Parked:
 		return []gap{{"branch is parked: approve is required", act}}

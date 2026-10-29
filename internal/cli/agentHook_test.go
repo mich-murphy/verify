@@ -15,7 +15,7 @@ func TestAgentHook(t *testing.T) {
 		stderr   string
 	}{
 		{"block", `{"toolName":"bash","input":{"command":"git commit -n"}}`, nil, 2, "blocked"},
-		{"block json", `{"tool_name":"Write","tool_input":{"file_path":"gate.yaml"}}`, []string{"--json"}, 2, ""},
+		{"block json", `{"tool_name":"Write","tool_input":{"file_path":"verify.yaml"}}`, []string{"--json"}, 2, ""},
 		{"allow", `{"toolName":"bash","input":{"command":"ls"}}`, nil, 0, ""},
 		{"allow json", `{"toolName":"bash","input":{"command":"ls"}}`, []string{"--json"}, 0, ""},
 		{"malformed", `{x`, nil, 0, "warning"},

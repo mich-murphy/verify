@@ -12,7 +12,7 @@ import (
 
 // The pattern strings are assembled by concatenation so that this source file
 // never contains the literal suppressions it searches for and so does not
-// trip Gate's own suppressions guard. Test fixtures do the same.
+// trip Verify's own suppressions guard. Test fixtures do the same.
 var (
 	lintPatterns = []string{
 		"//" + "nolint", "eslint" + "-disable", "oxlint" + "-disable", "biome" + "-ignore", "# " + "noqa",
@@ -44,7 +44,7 @@ func suppressions(d *gitx.LineDiff) []state.Finding {
 			continue
 		}
 		out = append(out, finding(Suppressions, l.Path, l.Number, state.SeverityBlock,
-			"added "+what+"; fix the cause or record `gate decide accept`"))
+			"added "+what+"; fix the cause or record `verify decide accept`"))
 	}
 	return out
 }

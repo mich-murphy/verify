@@ -58,11 +58,11 @@ func Select(choice, author, claudeModel, codexModel string) (Reviewer, error) {
 var envAllow = []string{"HOME", "PATH", "LANG", "LC_ALL", "USER"}
 
 // scratch is a private directory tree: cwd stays empty, tmp is TMPDIR and
-// files holds anything Gate hands to the CLI.
+// files holds anything Verify hands to the CLI.
 type scratch struct{ root, cwd, tmp string }
 
 func newScratch() (*scratch, error) {
-	root, err := os.MkdirTemp("", "gate-review-")
+	root, err := os.MkdirTemp("", "verify-review-")
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func (c *Codex) Run(ctx context.Context, packet []byte) ([]byte, Usage, error) {
 	if err != nil {
 		return nil, u, err
 	}
-	f, err := os.Open(outFile) // #nosec G304 -- Gate-created path in a private temp dir.
+	f, err := os.Open(outFile) // #nosec G304 -- Verify-created path in a private temp dir.
 	if err != nil {
 		return nil, u, invalid("codex wrote no final message")
 	}

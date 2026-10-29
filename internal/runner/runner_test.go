@@ -133,7 +133,7 @@ func TestSingleCommandSafety(t *testing.T) {
 	if got.Status != Pass || !strings.Contains(got.Stdout.Output, "SECRET=;APP=override;") {
 		t.Fatal(got)
 	}
-	c.Args = []string{"nonexistent gate executable"}
+	c.Args = []string{"nonexistent verify executable"}
 	got = runCommand(t, r, c)
 	if got.Status != Fail || !got.Started.IsZero() || got.ExitCode != -1 {
 		t.Fatal(got)

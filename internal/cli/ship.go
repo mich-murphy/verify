@@ -14,7 +14,7 @@ func runShip(env *Env) int {
 	dry := fs.Bool("dry-run", false, "print the plan and run nothing")
 	remote := fs.String("remote", "origin", "git remote to push to")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("ship", ExitUsage, "usage: gate ship [--dry-run] [--remote NAME] [--json]", "fix the arguments")
+		return env.Fail("ship", ExitUsage, "usage: verify ship [--dry-run] [--remote NAME] [--json]", "fix the arguments")
 	}
 	v, verr := gather(env)
 	if verr != nil {
@@ -40,7 +40,7 @@ func runShip(env *Env) int {
 	case err != nil:
 		res.Status = "blocked"
 		res.Message += "\n" + doneRemaining(rep)
-		res.NextAction = "resolve the error above and rerun gate ship; completed steps are safe to repeat"
+		res.NextAction = "resolve the error above and rerun verify ship; completed steps are safe to repeat"
 		return env.Emit(res, ExitBlocked)
 	case *dry:
 		res.Status = "dry-run"
@@ -60,7 +60,7 @@ func (v *view) shipRefusal(env *Env) *viewErr {
 		return &viewErr{msg: err.Error(), next: "resolve the git error"}
 	}
 	if !clean {
-		return &viewErr{msg: "working tree is not clean; only the committed SHA ships", next: "commit or stash the changes, then run gate check"}
+		return &viewErr{msg: "working tree is not clean; only the committed SHA ships", next: "commit or stash the changes, then run verify check"}
 	}
 	return nil
 }

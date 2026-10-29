@@ -1,8 +1,8 @@
 .tools/
-.gate-runtime/
+.verify-runtime/
 .cover/
 bin/
-.gate-bin/
+.verify-bin/
 coverage.out
 mutation.json
 *.prof

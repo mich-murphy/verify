@@ -1,4 +1,4 @@
-// Package state persists Gate records under <git-common-dir>/gate/.
+// Package state persists Verify records under <git-common-dir>/verify/.
 // Writes are atomic and made under an exclusive lock; reads fail closed.
 package state
 
@@ -18,20 +18,20 @@ import (
 )
 
 // ErrCorrupt marks a record that exists but cannot be trusted.
-var ErrCorrupt = errors.New("corrupt gate state")
+var ErrCorrupt = errors.New("corrupt verify state")
 
 // ErrNotFound is returned when a record does not exist.
-var ErrNotFound = errors.New("gate state not found")
+var ErrNotFound = errors.New("verify state not found")
 
 var shaPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
 // Store is the state directory.
 type Store struct{ Dir string }
 
-// Open returns the store rooted at <commonDir>/gate without creating it.
-func Open(commonDir string) *Store { return &Store{Dir: filepath.Join(commonDir, "gate")} }
+// Open returns the store rooted at <commonDir>/verify without creating it.
+func Open(commonDir string) *Store { return &Store{Dir: filepath.Join(commonDir, "verify")} }
 
-// WorktreesDir is where Gate-owned detached worktrees live.
+// WorktreesDir is where Verify-owned detached worktrees live.
 func (s *Store) WorktreesDir() string { return filepath.Join(s.Dir, "worktrees") }
 
 // RunDir is runs/<sha>.
@@ -73,7 +73,7 @@ func LockFile(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- Gate-owned lock path.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- Verify-owned lock path.
 	if err != nil {
 		return nil, err
 	}

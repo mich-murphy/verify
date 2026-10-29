@@ -22,7 +22,7 @@ func TestCompute(t *testing.T) {
 		{"changelog variant", []Change{c("CHANGELOG-2.txt", 1, 0)}, false, Docs},
 		{"docs plus code", []Change{c("README.md", 1, 0), c("main.go", 1, 0)}, false, Standard},
 		{"code", []Change{c("main.go", 5, 5)}, false, Standard},
-		{"gate.yaml", []Change{c("gate.yaml", 1, 0)}, false, Signoff},
+		{"verify.yaml", []Change{c("verify.yaml", 1, 0)}, false, Signoff},
 		{"prek config", []Change{c(".pre-commit-config.yaml", 1, 0)}, false, Signoff},
 		{"prek yml", []Change{c(".pre-commit-config.yml", 1, 0)}, false, Signoff},
 		{"custom golangci", []Change{c(".golangci-custom.toml", 1, 0)}, false, Signoff},

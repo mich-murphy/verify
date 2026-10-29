@@ -74,7 +74,7 @@ func scanSecrets(ctx context.Context, in Input) ([]state.Finding, error) {
 }
 
 // rangeSource feeds betterleaks one fragment per hunk of added lines in each
-// commit of base..sha, using Gate's hardened git runner (clean env). Every
+// commit of base..sha, using Verify's hardened git runner (clean env). Every
 // commit is scanned individually, so a secret added then removed within the
 // range is still found. Binary files are skipped (archive scanning, which the
 // library git source offered, is dropped). skip is the built-in rules' global

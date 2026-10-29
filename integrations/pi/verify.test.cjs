@@ -1,5 +1,5 @@
-// Run with PI_PACKAGE=/path/to/installed/@earendil-works/pi-coding-agent node --test integrations/pi/gate.test.cjs
-// Registers the real extension through the installed jiti loader, and runs a scratch Gate executable.
+// Run with PI_PACKAGE=/path/to/installed/@earendil-works/pi-coding-agent node --test integrations/pi/verify.test.cjs
+// Registers the real extension through the installed jiti loader, and runs a scratch Verify executable.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } = require('node:fs');
@@ -9,14 +9,14 @@ const { execFileSync } = require('node:child_process');
 
 const pkg = process.env.PI_PACKAGE;
 
-test('registered tool_call and agent_end feed bounded real Gate feedback', { skip: !pkg && 'set PI_PACKAGE to installed Pi SDK' }, async () => {
-  const root = mkdtempSync(path.join(tmpdir(), 'gate-pi-'));
+test('registered tool_call and agent_end feed bounded real Verify feedback', { skip: !pkg && 'set PI_PACKAGE to installed Pi SDK' }, async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'verify-pi-'));
   try {
     const bin = path.join(root, 'bin');
     const repo = path.join(root, 'repo');
     mkdirSync(bin);
     mkdirSync(repo);
-    execFileSync('go', ['build', '-o', path.join(bin, 'gate'), './cmd/gate'], { cwd: path.resolve(__dirname, '../..') });
+    execFileSync('go', ['build', '-o', path.join(bin, 'verify'), './cmd/verify'], { cwd: path.resolve(__dirname, '../..') });
     const prek = path.join(bin, 'prek');
     writeFileSync(prek, '#!/bin/sh\necho "fixture hook failed" >&2\nexit 1\n');
     chmodSync(prek, 0o755);
@@ -32,7 +32,7 @@ test('registered tool_call and agent_end feed bounded real Gate feedback', { ski
     process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
     try {
       const { createJiti } = require(path.join(pkg, 'node_modules/jiti'));
-      const factory = createJiti(__filename)(path.join(__dirname, 'gate.ts')).default;
+      const factory = createJiti(__filename)(path.join(__dirname, 'verify.ts')).default;
       const handlers = {};
       const sent = [];
       const notices = [];
@@ -50,7 +50,7 @@ test('registered tool_call and agent_end feed bounded real Gate feedback', { ski
       for (let i = 0; i < 5; i++) await handlers.agent_end({}, ctx);
       assert.equal(sent.length, 3, 'feedback capped despite repeated failures');
       assert.equal(notices.length, 5);
-      assert.match(sent[0].message, /gate check --fast failed/);
+      assert.match(sent[0].message, /verify check --fast failed/);
       assert.match(sent[0].message, /prek-pre-commit|failed/);
       assert.deepEqual(sent[0].options, { deliverAs: 'followUp' });
       assert.ok(sent.every(({ message }) => message.length <= 2200));

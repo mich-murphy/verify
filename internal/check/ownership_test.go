@@ -16,11 +16,11 @@ import (
 	"github.com/mich-murphy/verify/internal/state"
 )
 
-// The child is a separate Gate-like process running prepare. The parent kills
+// The child is a separate Verify-like process running prepare. The parent kills
 // it without allowing deferred cleanup, exercising persistent ownership.
 func TestCheckAbruptParentDeath(t *testing.T) {
-	if os.Getenv("GATE_ABRUPT_CHILD") == "1" {
-		r, err := gitx.Open(t.Context(), os.Getenv("GATE_ABRUPT_REPO"))
+	if os.Getenv("VERIFY_ABRUPT_CHILD") == "1" {
+		r, err := gitx.Open(t.Context(), os.Getenv("VERIFY_ABRUPT_REPO"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -31,10 +31,10 @@ func TestCheckAbruptParentDeath(t *testing.T) {
 	}
 	fakePrek(t)
 	pidFile := filepath.Join(t.TempDir(), "owned-pid")
-	t.Setenv("GATE_ABRUPT_PID_FILE", pidFile)
+	t.Setenv("VERIFY_ABRUPT_PID_FILE", pidFile)
 	yaml := `prepare:
   - name: stall
-    run: [sh, -c, 'echo $$ > "$GATE_ABRUPT_PID_FILE.tmp"; mv "$GATE_ABRUPT_PID_FILE.tmp" "$GATE_ABRUPT_PID_FILE"; sleep 30']
+    run: [sh, -c, 'echo $$ > "$VERIFY_ABRUPT_PID_FILE.tmp"; mv "$VERIFY_ABRUPT_PID_FILE.tmp" "$VERIFY_ABRUPT_PID_FILE"; sleep 30']
 `
 	repo := newRepo(t, yaml, true)
 	exe, err := os.Executable()
@@ -43,7 +43,7 @@ func TestCheckAbruptParentDeath(t *testing.T) {
 	}
 	// #nosec G204 -- Test-owned binary and fixed test entrypoint.
 	child := exec.CommandContext(t.Context(), exe, "-test.run=^TestCheckAbruptParentDeath$")
-	child.Env = append(os.Environ(), "GATE_ABRUPT_CHILD=1", "GATE_ABRUPT_REPO="+repo.Root)
+	child.Env = append(os.Environ(), "VERIFY_ABRUPT_CHILD=1", "VERIFY_ABRUPT_REPO="+repo.Root)
 	if err = child.Start(); err != nil {
 		t.Fatal(err)
 	}

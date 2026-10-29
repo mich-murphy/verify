@@ -1,6 +1,6 @@
-# Developing Gate
+# Developing Verify
 
-Gate is a Go project (see `go.mod` for the version). [SPEC.md](SPEC.md) defines the
+Verify is a Go project (see `go.mod` for the version). [SPEC.md](SPEC.md) defines the
 product; [STATUS.md](STATUS.md) says what is built.
 
 ## Setup
@@ -20,7 +20,7 @@ prek install --hook-type pre-commit --hook-type pre-push
 
 | Target | What it does |
 |---|---|
-| `make build` | Build `bin/gate`. |
+| `make build` | Build `bin/verify`. |
 | `make fmt` / `fmt-check` | Format with gofumpt and goimports / fail if unformatted. |
 | `make lint` | golangci-lint (config in `.golangci.yml`). |
 | `make vet` | `go vet ./...`. |
@@ -65,7 +65,7 @@ does not build against the newer release that other tools pull in. Drop the
 For a change ready for review, record **Testing**, **Risk**, and **How to revert**.
 Name the commands actually run and any unverified behavior; describe plausible failure
 modes and a realistic manual recovery path. These are repository conventions, not new
-Gate policy or rollback automation. Do not turn a reviewer-written repro into a claim
+Verify policy or rollback automation. Do not turn a reviewer-written repro into a claim
 of executed evidence. Explicit subscription-CLI experiments use the bounded developer
 harness in [docs/reviewer-evaluation.md](docs/reviewer-evaluation.md), never ordinary CI.
 
@@ -74,7 +74,7 @@ harness in [docs/reviewer-evaluation.md](docs/reviewer-evaluation.md), never ord
 Larger changes are split between subagents with disjoint file ownership. Each gets
 a brief naming the files it owns and the files it must not touch. The parent agent
 reviews the result, runs the gates, and makes the commits. Workers do not commit
-or push. In Pi, use the project agent type `gate-worker` (`.pi/agents/gate-worker.md`):
+or push. In Pi, use the project agent type `verify-worker` (`.pi/agents/verify-worker.md`):
 it has `websearch` and `webfetch`, which the built-in `general-purpose` type lacks.
 
 The active brief lives in `docs/coordination/current-session.md`. Keep it current

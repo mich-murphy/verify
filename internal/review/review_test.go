@@ -214,7 +214,7 @@ X
 	if strings.Contains(l, "sk-secret") || strings.Contains(l, "API_KEY") {
 		t.Fatal("API key leaked")
 	}
-	if !strings.Contains(l, "TMPDIR=") || !strings.Contains(l, "gate-review-") {
+	if !strings.Contains(l, "TMPDIR=") || !strings.Contains(l, "verify-review-") {
 		t.Fatal("TMPDIR not private")
 	}
 	cwd := strings.TrimSpace(strings.Split(strings.Split(l, "CWD\n")[1], "\n")[0])

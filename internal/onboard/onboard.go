@@ -1,4 +1,4 @@
-// Package onboard implements `gate setup --apply` (SPEC §4.3.1). It fills in
+// Package onboard implements `verify setup --apply` (SPEC §4.3.1). It fills in
 // only what is missing: it never overwrites or reorders existing content.
 package onboard
 

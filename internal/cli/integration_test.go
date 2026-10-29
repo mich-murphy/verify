@@ -69,7 +69,7 @@ func setup(t *testing.T, prekMode string) string {
 	t.Setenv("PATH", bin)
 	repo, _ := filepath.EvalSymlinks(t.TempDir())
 	gitRun(t, repo, "init", "-q", "-b", "main")
-	write(t, repo, "gate.yaml", baseYAML)
+	write(t, repo, "verify.yaml", baseYAML)
 	write(t, repo, ".pre-commit-config.yaml", "repos: []\n")
 	write(t, repo, "a.go", "package a\n")
 	write(t, repo, "README.md", "hi\n")
@@ -87,7 +87,7 @@ func commit(t *testing.T, repo, file, content string) {
 	gitRun(t, repo, "commit", "-q", "-m", "change "+file)
 }
 
-func gate(t *testing.T, args ...string) (Result, int) {
+func runCLI(t *testing.T, args ...string) (Result, int) {
 	t.Helper()
 	var out, errb bytes.Buffer
 	code := Run(append(args, "--json"), strings.NewReader(""), &out, &errb)
@@ -95,24 +95,27 @@ func gate(t *testing.T, args ...string) (Result, int) {
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
 		t.Fatalf("bad json %q (stderr %q): %v", out.String(), errb.String(), err)
 	}
+	if r.Schema != "verify.result/1" {
+		t.Fatalf("unexpected result schema %q", r.Schema)
+	}
 	return r, code
 }
 
 func TestCheckPassAndStatus(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "a.go", "package a\n\nvar X = 1\n")
-	r, code := gate(t, "check")
+	r, code := runCLI(t, "check")
 	if code != 0 || r.Status != "pass" || r.Lane != "standard" || len(r.Steps) != 2 || r.Steps[0].Name != "prek-pre-commit" {
 		t.Fatalf("code=%d %+v", code, r)
 	}
 	if _, err := os.Stat(r.Steps[0].Log); err != nil {
 		t.Fatalf("log missing: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, ".git", "gate", "worktrees", "check")); err != nil {
+	if _, err := os.Stat(filepath.Join(repo, ".git", "verify", "worktrees", "check")); err != nil {
 		t.Fatalf("worktree not kept for reuse: %v", err)
 	}
-	s, code := gate(t, "status")
-	if code != 0 || s.SHA != r.SHA || !strings.Contains(s.Message, "check:  pass") || s.NextAction != "run gate review" {
+	s, code := runCLI(t, "status")
+	if code != 0 || s.SHA != r.SHA || !strings.Contains(s.Message, "check:  pass") || s.NextAction != "run verify review" {
 		t.Fatalf("code=%d %+v", code, s)
 	}
 }
@@ -120,7 +123,7 @@ func TestCheckPassAndStatus(t *testing.T) {
 func TestCheckFailingHook(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "fail-hook", "x\n")
-	r, code := gate(t, "check")
+	r, code := runCLI(t, "check")
 	if code != 1 || r.Status != "fail" || r.NextAction == "" {
 		t.Fatalf("code=%d %+v", code, r)
 	}
@@ -131,7 +134,7 @@ func TestCheckFailingHook(t *testing.T) {
 	if !found {
 		t.Fatalf("no block finding: %+v", r.Findings)
 	}
-	s, _ := gate(t, "status")
+	s, _ := runCLI(t, "status")
 	if s.Status != "blocked-by-findings" {
 		t.Fatalf("%+v", s)
 	}
@@ -140,7 +143,7 @@ func TestCheckFailingHook(t *testing.T) {
 func TestCheckMissingPrek(t *testing.T) {
 	repo := setup(t, "none")
 	commit(t, repo, "a.go", "package a\n\nvar Y = 1\n")
-	r, code := gate(t, "check")
+	r, code := runCLI(t, "check")
 	if code != 1 || r.Steps[0].Status != "fail" {
 		t.Fatalf("code=%d %+v", code, r)
 	}
@@ -149,20 +152,20 @@ func TestCheckMissingPrek(t *testing.T) {
 func TestDocsLane(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "README.md", "changed\n")
-	r, code := gate(t, "check")
+	r, code := runCLI(t, "check")
 	if code != 0 || r.Lane != "docs" {
 		t.Fatalf("code=%d %+v", code, r)
 	}
-	s, _ := gate(t, "status")
-	if s.NextAction != "run gate ship" {
+	s, _ := runCLI(t, "status")
+	if s.NextAction != "run verify ship" {
 		t.Fatalf("%+v", s)
 	}
 }
 
-func TestSignoffLaneWhenGateYAMLChanges(t *testing.T) {
+func TestSignoffLaneWhenVerifyYAMLChanges(t *testing.T) {
 	repo := setup(t, "fake")
-	commit(t, repo, "gate.yaml", baseYAML+"signoff_paths: [\"x/**\"]\n")
-	r, code := gate(t, "check")
+	commit(t, repo, "verify.yaml", baseYAML+"signoff_paths: [\"x/**\"]\n")
+	r, code := runCLI(t, "check")
 	if code != 0 || r.Lane != "signoff" {
 		t.Fatalf("code=%d %+v", code, r)
 	}
@@ -217,7 +220,7 @@ func TestUsage(t *testing.T) {
 			o.Reset()
 			e.Reset()
 			code := Run(args, nil, &o, &e)
-			if code != ExitOK || !strings.Contains(o.String(), "usage: gate "+name) || !strings.Contains(o.String(), helpFlags[name]) {
+			if code != ExitOK || !strings.Contains(o.String(), "usage: verify "+name) || !strings.Contains(o.String(), helpFlags[name]) {
 				t.Errorf("%v: code %d output %q stderr %q", args, code, o.String(), e.String())
 			}
 			if len(args) == 3 {
@@ -233,7 +236,7 @@ func TestUsage(t *testing.T) {
 func TestDecideReasonValueIsNotHelp(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "README.md", "changed\n")
-	r, code := gate(t, "decide", "approve", "--reason", "--help")
+	r, code := runCLI(t, "decide", "approve", "--reason", "--help")
 	if code != ExitOK || r.Status != "ok" {
 		t.Fatalf("reason was interpreted as help: code %d result %+v", code, r)
 	}
@@ -253,17 +256,17 @@ func TestStatusAndCheckErrorPaths(t *testing.T) {
 	if code := Run([]string{"status", "extra"}, nil, &sink, &sink); code != ExitUsage {
 		t.Fatalf("code %d", code)
 	}
-	if r, code := gate(t, "check", "--sha", "nope"); code != ExitBlocked || r.NextAction == "" {
+	if r, code := runCLI(t, "check", "--sha", "nope"); code != ExitBlocked || r.NextAction == "" {
 		t.Fatalf("code %d %+v", code, r)
 	}
-	if _, code := gate(t, "check"); code != 0 {
+	if _, code := runCLI(t, "check"); code != 0 {
 		t.Fatalf("code %d", code)
 	}
 	// corrupt record fails closed
-	r, _ := gate(t, "status")
-	p := filepath.Join(repo, ".git", "gate", "runs", r.SHA, "check.json")
+	r, _ := runCLI(t, "status")
+	p := filepath.Join(repo, ".git", "verify", "runs", r.SHA, "check.json")
 	write(t, "/", p, "{bad")
-	if s, code := gate(t, "status"); code != ExitBlocked || s.NextAction == "" {
+	if s, code := runCLI(t, "status"); code != ExitBlocked || s.NextAction == "" {
 		t.Fatalf("code %d %+v", code, s)
 	}
 }
@@ -273,7 +276,7 @@ func TestTextOutputAndNotRepo(t *testing.T) {
 	commit(t, repo, "fail-hook", "x\n")
 	var out, errb bytes.Buffer
 	code := Run([]string{"check"}, nil, &out, &errb)
-	if code != 1 || !strings.Contains(out.String(), "gate check: fail") || !strings.Contains(out.String(), "next:") {
+	if code != 1 || !strings.Contains(out.String(), "verify check: fail") || !strings.Contains(out.String(), "next:") {
 		t.Fatalf("code %d %q", code, out.String())
 	}
 	out.Reset()
@@ -282,7 +285,7 @@ func TestTextOutputAndNotRepo(t *testing.T) {
 	}
 	t.Chdir(t.TempDir())
 	for _, c := range []string{"check", "status"} {
-		if _, code := gate(t, c); code != ExitBlocked {
+		if _, code := runCLI(t, c); code != ExitBlocked {
 			t.Fatalf("%s code %d", c, code)
 		}
 	}

@@ -132,7 +132,7 @@ func Matches(id string, names []string) bool {
 }
 
 // matching returns every hook that runs at commit or push and whose id names
-// the obligation, so `gate setup` can show all of them and a wrong match
+// the obligation, so `verify setup` can show all of them and a wrong match
 // (tofu-fmt for format) is visible next to the right one.
 func matching(hooks []hook, names []string) []hook {
 	var out []hook

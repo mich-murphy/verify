@@ -19,7 +19,7 @@ A parent that exits with live owned children fails; zombies are not live.
 Check and verify durably create a `<worktree>.quarantine` marker under their
 worktree lock **before** reset, audit, prepare, setup, or scenarios run. Only
 ordinary return with every command settled removes the owned marker, even when
-a command failed. If Gate crashes or cleanup is incomplete, later runs refuse
+a command failed. If Verify crashes or cleanup is incomplete, later runs refuse
 to reuse that path. Recovery requires inspecting owned processes and explicitly
 removing the stale marker.
 

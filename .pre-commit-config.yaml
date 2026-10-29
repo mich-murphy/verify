@@ -29,7 +29,7 @@ repos:
       - {id: secrets, name: secrets, entry: make secrets-staged, language: system, pass_filenames: false, priority: checks, stages: [pre-commit]}
       # Full tier: one race+coverage run, cacheable, all hooks in parallel, scoped to the
       # blast radius (SPEC §4.5 rule 4). A go.mod/go.sum, Makefile or config change makes
-      # Gate run --all-files, so manifests need no trigger of their own here.
+      # Verify run --all-files, so manifests need no trigger of their own here.
       - {id: tidy-check, name: tidy-check, entry: make tidy-check, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}
       - {id: vet, name: vet, entry: make vet, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}
       - {id: cover, name: cover (race + coverage), entry: make cover TESTFLAGS=, language: system, pass_filenames: false, files: '(\.go$|(^|/)testdata/)', priority: full, stages: [pre-push]}

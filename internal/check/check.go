@@ -1,4 +1,4 @@
-// Package check implements `gate check` (SPEC §4).
+// Package check implements `verify check` (SPEC §4).
 package check
 
 import (
@@ -332,7 +332,7 @@ func stepEvidence(name string, r runner.Result, err error) (step state.Step, log
 		}
 	}
 	if msg != "" {
-		_, _ = fmt.Fprintf(&b, "\n--- gate: %s ---\n", msg)
+		_, _ = fmt.Fprintf(&b, "\n--- verify: %s ---\n", msg)
 	}
 	return step, b.String(), msg
 }

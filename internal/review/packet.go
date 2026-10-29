@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-// MaxPacket is the largest packet Gate will send.
+// MaxPacket is the largest packet Verify will send.
 const MaxPacket = 256 << 10
 
-// ErrTooLarge means the change must be split; Gate never truncates a packet.
+// ErrTooLarge means the change must be split; Verify never truncates a packet.
 var ErrTooLarge = errors.New("review packet exceeds 256 KiB")
 
 // OpenFinding is a previously reported, still open finding shown to a delta review.

@@ -13,17 +13,17 @@ func init() { register("agent-hook", runAgentHook) }
 func runAgentHook(env *Env) int {
 	fs := env.Flags("agent-hook")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("agent-hook", ExitUsage, "usage: gate agent-hook [--json] < tool-call.json", "fix the arguments")
+		return env.Fail("agent-hook", ExitUsage, "usage: verify agent-hook [--json] < tool-call.json", "fix the arguments")
 	}
 	v := agenthook.Evaluate(env.Stdin)
 	if v.Warning != "" && !env.JSON {
-		_, _ = fmt.Fprintln(env.Stderr, "gate agent-hook: warning: "+v.Warning)
+		_, _ = fmt.Fprintln(env.Stderr, "verify agent-hook: warning: "+v.Warning)
 	}
 	if v.Block {
 		if env.JSON {
 			return env.Emit(Result{Command: "agent-hook", Status: "blocked", Message: v.Reason, NextAction: "do not bypass hooks; fix what they report"}, ExitUsage)
 		}
-		_, _ = fmt.Fprintln(env.Stderr, "gate: blocked: "+v.Reason)
+		_, _ = fmt.Fprintln(env.Stderr, "verify: blocked: "+v.Reason)
 		return ExitUsage
 	}
 	if env.JSON {

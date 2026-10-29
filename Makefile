@@ -1,11 +1,11 @@
 # Dev tools are pinned in tools/go.mod and run with `go tool`.
 GOTOOL := go tool -modfile=tools/go.mod
-GOFILES = $$(git ls-files '*.go')
+GOFILES = $$(git ls-files --cached --others --exclude-standard --deduplicate '*.go' | while IFS= read -r file; do if [ -f "$$file" ]; then printf '%s\n' "$$file"; fi; done)
 
 .PHONY: build fmt fmt-check lint vet tidy-check test cover deadcode vuln secrets secrets-staged actionlint check ci
 
 build:
-	go build -o bin/gate ./cmd/gate
+	go build -o bin/verify ./cmd/verify
 
 fmt:
 	$(GOTOOL) gofumpt -w .

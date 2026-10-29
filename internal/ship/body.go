@@ -22,7 +22,7 @@ type BodyInput struct {
 // Body renders the PR description.
 func Body(in BodyInput) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Gate\n\nCommit `%s`, **%s** lane.\n", in.SHA, in.Lane)
+	fmt.Fprintf(&b, "## Verify\n\nCommit `%s`, **%s** lane.\n", in.SHA, in.Lane)
 	if len(in.LaneReasons) > 0 {
 		fmt.Fprintf(&b, "Lane reasons: %s.\n", strings.Join(in.LaneReasons, "; "))
 	}
@@ -47,7 +47,7 @@ func Body(in BodyInput) string {
 			fmt.Fprintf(&b, "- scenario %s: %s (exit %d)%s\n", sc.Name, sc.Status, sc.ExitCode, oneLine(sc.Detail))
 		}
 	}
-	b.WriteString("\nReviewer findings below are claims, not executed reproductions. Gate does not assert CI results, merge approval or rollback readiness.\n")
+	b.WriteString("\nReviewer findings below are claims, not executed reproductions. Verify does not assert CI results, merge approval or rollback readiness.\n")
 	writeFindings(&b, in)
 	writeDecisions(&b, in)
 	return b.String()

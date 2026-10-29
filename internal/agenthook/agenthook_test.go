@@ -124,17 +124,17 @@ func TestCheckCommand(t *testing.T) {
 
 func TestCheckPath(t *testing.T) {
 	block := []string{
-		"gate.yaml", "./gate.yaml", "sub/gate.yaml", "/abs/repo/gate.yaml",
+		"verify.yaml", "./verify.yaml", "sub/verify.yaml", "/abs/repo/verify.yaml",
 		".pre-commit-config.yaml", "prek.toml", "lefthook.yml",
 		".husky/pre-commit", ".husky/_/husky.sh", "x/.husky/commit-msg", ".git/config", "/r/.git/config",
-		".git/hooks/pre-commit", "/r/.git/hooks/pre-push", "a/../gate.yaml",
+		".git/hooks/pre-commit", "/r/.git/hooks/pre-push", "a/../verify.yaml",
 	}
 	for _, p := range block {
 		if CheckPath(p) == "" {
 			t.Errorf("allowed %q", p)
 		}
 	}
-	allow := []string{"", "main.go", "docs/gate.yaml.md", "gate.yml", ".githooks/x", "husky/x", "internal/hooks/a.go"}
+	allow := []string{"", "main.go", "docs/verify.yaml.md", "verify.yml", ".githooks/x", "husky/x", "internal/hooks/a.go"}
 	for _, p := range allow {
 		if r := CheckPath(p); r != "" {
 			t.Errorf("blocked %q: %s", p, r)
@@ -149,7 +149,7 @@ func TestEvaluate(t *testing.T) {
 	}{
 		{"pi bash block", `{"toolName":"bash","input":{"command":"git commit --no-verify"}}`, true, false},
 		{"pi bash ok", `{"toolName":"bash","input":{"command":"git status"}}`, false, false},
-		{"pi write block", `{"toolName":"write","input":{"path":"gate.yaml","content":"x"}}`, true, false},
+		{"pi write block", `{"toolName":"write","input":{"path":"verify.yaml","content":"x"}}`, true, false},
 		{"pi edit block", `{"toolName":"edit","input":{"path":".husky/pre-commit"}}`, true, false},
 		{"pi write ok", `{"toolName":"write","input":{"path":"main.go"}}`, false, false},
 		{"cc Bash block", `{"tool_name":"Bash","tool_input":{"command":"git commit -n"}}`, true, false},
@@ -159,7 +159,7 @@ func TestEvaluate(t *testing.T) {
 		{"cc MultiEdit block", `{"tool_name":"MultiEdit","tool_input":{"file_path":"lefthook.yml"}}`, true, false},
 		{"cc Write ok", `{"tool_name":"Write","tool_input":{"file_path":"README.md"}}`, false, false},
 		{"extra fields", `{"tool_name":"Bash","session_id":"s","hook_event_name":"PreToolUse","tool_input":{"command":"ls","description":"d"}}`, false, false},
-		{"unknown tool", `{"toolName":"read","input":{"path":"gate.yaml"}}`, false, false},
+		{"unknown tool", `{"toolName":"read","input":{"path":"verify.yaml"}}`, false, false},
 		{"no input", `{"toolName":"bash"}`, false, false},
 		{"malformed", `{not json`, false, true},
 		{"empty", ``, false, true},

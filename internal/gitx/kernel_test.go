@@ -55,7 +55,7 @@ func TestKernelHelpers(t *testing.T) {
 	if _, _, err := r.FileAt(ctx, "main", "../x"); err == nil {
 		t.Fatal("want invalid path error")
 	}
-	wt := filepath.Join(r.CommonDir, "gate", "worktrees", "w")
+	wt := filepath.Join(r.CommonDir, "verify", "worktrees", "w")
 	if err := r.AddWorktree(ctx, wt, "feat"); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestResetWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	c1, c2 := "HEAD~1", "HEAD"
-	wt := filepath.Join(r.CommonDir, "gate", "worktrees", "check")
+	wt := filepath.Join(r.CommonDir, "verify", "worktrees", "check")
 	keep := []string{"node_modules", ".turbo"}
 	read := func(p string) string {
 		d, _ := os.ReadFile(filepath.Join(wt, p)) // #nosec G304 -- test path

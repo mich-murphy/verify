@@ -11,7 +11,7 @@ import (
 
 func init() { register("decide", runDecide) }
 
-const decideUsage = "usage: gate decide approve|accept ID|waive OBLIGATION --reason TEXT [--json]"
+const decideUsage = "usage: verify decide approve|accept ID|waive OBLIGATION --reason TEXT [--json]"
 
 // parseDecide splits "<kind> [target] --reason R" in any flag order.
 func parseDecide(env *Env, fs *flag.FlagSet, reason *string) (kind, target string, ok bool) {
@@ -59,11 +59,11 @@ func runDecide(env *Env) int {
 		return env.Fail("decide", ExitBlocked, "HEAD is detached; decisions are recorded per branch", "check out a branch")
 	}
 	if kind != state.DecideApprove && v.recs.chk == nil {
-		return env.Fail("decide", ExitBlocked, "no check record for HEAD", "run gate check")
+		return env.Fail("decide", ExitBlocked, "no check record for HEAD", "run verify check")
 	}
 	target, msg := normaliseTarget(v, kind, target)
 	if msg != "" {
-		return env.Fail("decide", ExitUsage, msg, "run gate status to see finding IDs")
+		return env.Fail("decide", ExitUsage, msg, "run verify status to see finding IDs")
 	}
 	err := recordDecision(v, kind, target, *reason)
 	if err != nil {
@@ -72,7 +72,7 @@ func runDecide(env *Env) int {
 	return env.Emit(Result{
 		Command: "decide", SHA: v.sha, Lane: v.lane.Lane, Status: "ok",
 		Message:    strings.TrimSpace("recorded " + kind + " " + target + " on " + v.sha[:12]),
-		NextAction: "run gate status",
+		NextAction: "run verify status",
 	}, ExitOK)
 }
 
@@ -150,7 +150,7 @@ func acceptProblem(v *view, id string) string {
 		case state.SourceGuard:
 			return ""
 		case state.SourceSetup:
-			return id + " is a setup finding: use gate decide waive " + id
+			return id + " is a setup finding: use verify decide waive " + id
 		}
 		return id + " is a failing check and cannot be accepted; fix it"
 	}

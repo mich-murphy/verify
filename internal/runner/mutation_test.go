@@ -125,9 +125,9 @@ func TestMalformedGroupInspectionFailsClosed(t *testing.T) {
 
 func TestRepositoryEnvDropsGitOverrides(t *testing.T) {
 	t.Setenv("GIT_INDEX_FILE", "bad-index")
-	t.Setenv("GATE_EXPECTED", "kept")
+	t.Setenv("VERIFY_EXPECTED", "kept")
 	env := RepositoryEnv()
-	if _, ok := env["GIT_INDEX_FILE"]; ok || env["GATE_EXPECTED"] != "kept" {
+	if _, ok := env["GIT_INDEX_FILE"]; ok || env["VERIFY_EXPECTED"] != "kept" {
 		t.Fatal("inherited unsafe Git env", env["GIT_INDEX_FILE"])
 	}
 }
