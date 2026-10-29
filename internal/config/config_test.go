@@ -11,6 +11,27 @@ import (
 	"github.com/mich-murphy/verify/internal/gitx"
 )
 
+func TestConfigNamespace(t *testing.T) {
+	if FileName != "verify.yaml" {
+		t.Fatalf("config filename %q", FileName)
+	}
+	dir := t.TempDir()
+	cgit(t, dir, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "gate.yaml"), []byte("bogus: legacy config must be ignored\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cgit(t, dir, "add", ".")
+	cgit(t, dir, "commit", "-qm", "legacy config only")
+	repo, err := gitx.Open(t.Context(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(t.Context(), repo, "HEAD")
+	if err != nil || loaded.Found || loaded.Config.Base != "main" {
+		t.Fatalf("legacy config must not govern Verify: %+v %v", loaded, err)
+	}
+}
+
 func TestParseDefaults(t *testing.T) {
 	c, err := Parse([]byte(""))
 	if err != nil || c.Base != "" || len(c.Prepare) != 0 {
@@ -77,11 +98,11 @@ func TestEmptyArgvArgumentsAreValid(t *testing.T) {
 }
 
 func TestParseEmptyOutputAssertions(t *testing.T) {
-	c, err := Parse([]byte("verify:\n  surfaces: ['cmd/**']\n  scenarios:\n    - name: help\n      run: [gate]\n      stdout_equals: ''\n      stdout_contains: ''\n"))
+	c, err := Parse([]byte("verify:\n  surfaces: ['cmd/**']\n  scenarios:\n    - name: help\n      run: [verify]\n      stdout_equals: ''\n      stdout_contains: ''\n"))
 	if err != nil || c.Verify.Scenarios[0].StdoutEquals == nil || *c.Verify.Scenarios[0].StdoutEquals != "" || c.Verify.Scenarios[0].StdoutContains == nil || *c.Verify.Scenarios[0].StdoutContains != "" {
 		t.Fatalf("%+v %v", c, err)
 	}
-	c, err = Parse([]byte("verify:\n  scenarios:\n    - {name: help, run: [gate]}\n"))
+	c, err = Parse([]byte("verify:\n  scenarios:\n    - {name: help, run: [verify]}\n"))
 	if err != nil || c.Verify.Scenarios[0].StdoutEquals != nil || c.Verify.Scenarios[0].StdoutContains != nil {
 		t.Fatalf("%+v %v", c, err)
 	}
@@ -120,7 +141,7 @@ func TestLoadTrustedBase(t *testing.T) {
 	cgit(t, d, "init", "-q", "-b", "main")
 	write := func(value string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte(value), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte(value), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -151,7 +172,7 @@ func TestLoadRejectsCandidateSelfBaseButAllowsAlternate(t *testing.T) {
 	cgit(t, d, "commit", "-qm", "root")
 	cgit(t, d, "branch", "alternate")
 	cgit(t, d, "checkout", "-qb", "feature")
-	if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte("base: alternate\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte("base: alternate\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cgit(t, d, "add", ".")
@@ -165,7 +186,7 @@ func TestLoadRejectsCandidateSelfBaseButAllowsAlternate(t *testing.T) {
 	if err != nil || l.MergeBase != base || !l.FromCandidate || l.Config.Base != "alternate" {
 		t.Fatalf("%+v %v", l, err)
 	}
-	if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte("base: feature\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte("base: feature\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cgit(t, d, "commit", "-qam", "self base")
@@ -183,7 +204,7 @@ func TestLoadWithoutDefaultRefRequiresIndependentBase(t *testing.T) {
 	cgit(t, d, "add", ".")
 	cgit(t, d, "commit", "-qm", "root")
 	cgit(t, d, "checkout", "-qb", "feature")
-	if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte("base: trunk\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte("base: trunk\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cgit(t, d, "add", ".")
@@ -197,7 +218,7 @@ func TestLoadWithoutDefaultRefRequiresIndependentBase(t *testing.T) {
 	if err != nil || l.MergeBase != base || !l.FromCandidate {
 		t.Fatalf("explicit independent base: %+v %v", l, err)
 	}
-	if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte("base: feature\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte("base: feature\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cgit(t, d, "commit", "-qam", "self")
@@ -205,7 +226,7 @@ func TestLoadWithoutDefaultRefRequiresIndependentBase(t *testing.T) {
 		t.Fatalf("self without anchor: %v", err)
 	}
 	cgit(t, d, "checkout", "-q", "trunk")
-	if err := os.WriteFile(filepath.Join(d, "gate.yaml"), []byte("base: trunk\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(d, "verify.yaml"), []byte("base: trunk\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cgit(t, d, "add", ".")
@@ -237,7 +258,7 @@ func TestLoad(t *testing.T) {
 	cgit(t, dir, "add", ".")
 	cgit(t, dir, "commit", "-qm", "base")
 	cgit(t, dir, "checkout", "-qb", "feat")
-	w("gate.yaml", "signoff_paths: [\"x/**\"]\n")
+	w("verify.yaml", "signoff_paths: [\"x/**\"]\n")
 	cgit(t, dir, "add", ".")
 	cgit(t, dir, "commit", "-qm", "add config")
 	repo, err := gitx.Open(t.Context(), dir)
@@ -254,13 +275,13 @@ func TestLoad(t *testing.T) {
 	}
 	cgit(t, dir, "checkout", "-q", "main")
 	cgit(t, dir, "merge", "-q", "feat")
-	w("gate.yaml", "signoff_paths: [\"y/**\"]\n")
+	w("verify.yaml", "signoff_paths: [\"y/**\"]\n")
 	cgit(t, dir, "commit", "-qam", "tweak")
 	l, err = Load(t.Context(), repo, "HEAD")
 	if err != nil || l.FromCandidate || l.Config.SignoffPaths[0] != "y/**" {
 		t.Fatalf("%+v %v", l, err)
 	}
-	w("gate.yaml", "bogus: 1\n")
+	w("verify.yaml", "bogus: 1\n")
 	cgit(t, dir, "commit", "-qam", "bad")
 	if _, err = Load(t.Context(), repo, "HEAD"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("want ErrInvalid, got %v", err)
@@ -280,11 +301,11 @@ func TestLoadInvalidMergeBaseFallsBack(t *testing.T) {
 		}
 	}
 	cgit(t, dir, "init", "-q", "-b", "main")
-	w("gate.yaml", "version: 1\nprofile: go\n")
+	w("verify.yaml", "version: 1\nprofile: go\n")
 	cgit(t, dir, "add", ".")
 	cgit(t, dir, "commit", "-qm", "base")
 	cgit(t, dir, "checkout", "-qb", "feat")
-	w("gate.yaml", "verify:\n  surfaces: [\"cmd/**\"]\n  scenarios:\n    - {name: help, run: [gate]}\n")
+	w("verify.yaml", "verify:\n  surfaces: [\"cmd/**\"]\n  scenarios:\n    - {name: help, run: [verify]}\n")
 	cgit(t, dir, "commit", "-qam", "new format")
 	repo, err := gitx.Open(t.Context(), dir)
 	if err != nil {
@@ -294,7 +315,7 @@ func TestLoadInvalidMergeBaseFallsBack(t *testing.T) {
 	if err != nil || !l.FromCandidate || !l.Found || len(l.Config.Verify.Surfaces) != 1 {
 		t.Fatalf("%+v %v", l, err)
 	}
-	cgit(t, dir, "rm", "-q", "gate.yaml")
+	cgit(t, dir, "rm", "-q", "verify.yaml")
 	cgit(t, dir, "commit", "-qm", "delete")
 	l, err = Load(t.Context(), repo, "feat")
 	if err != nil || !l.FromCandidate || l.Found || l.Config.Base != "main" {

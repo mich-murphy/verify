@@ -203,7 +203,7 @@ func (a *auditor) readHooks() ([]hook, bool) {
 	if err != nil {
 		detail = err.Error()
 	}
-	a.add("prek-config", Required, detail, "run `gate setup --apply`, or create .pre-commit-config.yaml with `repo: local` hooks whose ids are the standard obligation ids (SPEC §4.3)")
+	a.add("prek-config", Required, detail, "run `verify setup --apply`, or create .pre-commit-config.yaml with `repo: local` hooks whose ids are the standard obligation ids (SPEC §4.3)")
 	return hooks, !found || err == nil
 }
 
@@ -231,7 +231,7 @@ func (a *auditor) hookObligations(goP, tsP bool) {
 		o := Obligation{ID: r.id, Level: lvl, Waived: a.cfg.Waived(r.id), Satisfied: len(ms) > 0, Hook: strings.Join(ids, ", ")}
 		if !o.Satisfied {
 			o.Detail = fmt.Sprintf("no prek hook for %s at pre-commit or pre-push (accepted ids: %s)", r.id, strings.Join(r.names(), ", "))
-			o.Fix = fmt.Sprintf("add a %s hook with id %q to the prek config (`gate setup --apply` writes it)", r.stage, r.id)
+			o.Fix = fmt.Sprintf("add a %s hook with id %q to the prek config (`verify setup --apply` writes it)", r.stage, r.id)
 		}
 		a.obs = append(a.obs, o)
 	}

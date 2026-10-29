@@ -96,7 +96,7 @@ func Nested(dir string) (sub string, m Manager, ok bool) {
 	return sub, m, n == 1
 }
 
-// Package is the part of package.json that Gate reads.
+// Package is the part of package.json that Verify reads.
 type Package struct {
 	Scripts         map[string]string `json:"scripts"`
 	Dependencies    map[string]string `json:"dependencies"`

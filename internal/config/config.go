@@ -1,4 +1,4 @@
-// Package config loads and validates the optional gate.yaml described in SPEC §3.
+// Package config loads and validates the optional verify.yaml described in SPEC §3.
 package config
 
 import (
@@ -20,10 +20,10 @@ import (
 )
 
 // FileName is the repository-root configuration file.
-const FileName = "gate.yaml"
+const FileName = "verify.yaml"
 
 // ErrInvalid marks configuration the user must fix (exit code 2).
-var ErrInvalid = errors.New("invalid gate.yaml")
+var ErrInvalid = errors.New("invalid verify.yaml")
 
 // Duration is a YAML duration string such as "10m".
 type Duration time.Duration
@@ -53,10 +53,10 @@ const (
 	ReviewCalls = 2
 )
 
-// Stages are the prek stages `gate check` runs, in order.
+// Stages are the prek stages `verify check` runs, in order.
 func Stages() []string { return []string{"pre-commit", "pre-push"} }
 
-// Config is the parsed gate.yaml. Every key is optional; Base is filled in
+// Config is the parsed verify.yaml. Every key is optional; Base is filled in
 // by Load when the file gives none.
 type Config struct {
 	Base         string   `yaml:"base"`
@@ -97,10 +97,10 @@ type Waiver struct {
 	Reason     string `yaml:"reason"`
 }
 
-// Default returns the configuration used when no gate.yaml exists.
+// Default returns the configuration used when no verify.yaml exists.
 func Default() Config { return Config{Base: "main"} }
 
-// Parse strictly decodes and validates gate.yaml content. Unknown keys are errors.
+// Parse strictly decodes and validates verify.yaml content. Unknown keys are errors.
 func Parse(data []byte) (Config, error) {
 	var c Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -231,8 +231,8 @@ func (c Config) Waived(id string) bool {
 type Loaded struct {
 	Config        Config
 	MergeBase     string // merge-base of the candidate and the base ref
-	FromCandidate bool   // the merge-base had no usable gate.yaml, so the candidate's governs
-	Found         bool   // some gate.yaml was used; false means defaults
+	FromCandidate bool   // the merge-base had no usable verify.yaml, so the candidate's governs
+	Found         bool   // some verify.yaml was used; false means defaults
 }
 
 // Load anchors policy at the default branch before considering candidate

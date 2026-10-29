@@ -79,10 +79,10 @@ func newEnv(t *testing.T) *env {
 	git(t, e.dir, "commit", "-q", "-m", "first")
 	git(t, e.dir, "remote", "add", "origin", "git@github.com:example/project.git")
 	ssh := filepath.Join(bin, "ssh")
-	if err := os.WriteFile(ssh, []byte("#!/bin/sh\ncase \"$*\" in *git-upload-pack*) exec git-upload-pack \"$GATE_BARE\";; *git-receive-pack*) exec git-receive-pack \"$GATE_BARE\";; esac\nexit 1\n"), 0o700); err != nil { // #nosec G306 -- fake executable in test temp directory
+	if err := os.WriteFile(ssh, []byte("#!/bin/sh\ncase \"$*\" in *git-upload-pack*) exec git-upload-pack \"$VERIFY_BARE\";; *git-receive-pack*) exec git-receive-pack \"$VERIFY_BARE\";; esac\nexit 1\n"), 0o700); err != nil { // #nosec G306 -- fake executable in test temp directory
 		t.Fatal(err)
 	}
-	t.Setenv("GATE_BARE", e.origin)
+	t.Setenv("VERIFY_BARE", e.origin)
 	e.sha = git(t, e.dir, "rev-parse", "HEAD")
 	var err error
 	if e.repo, err = gitx.Open(t.Context(), e.dir); err != nil {
@@ -129,7 +129,7 @@ func TestShipCreatesPR(t *testing.T) {
 	log := e.log(t)
 	for _, want := range []string{
 		"pr view feature --repo github.com/example/project --json number,url,state", "pr create --repo github.com/example/project --head feature --base main --title first --body-file",
-		"api --hostname github.com -X POST repos/example/project/statuses/" + e.sha + " -f state=success -f context=gate/verified -f description=",
+		"api --hostname github.com -X POST repos/example/project/statuses/" + e.sha + " -f state=success -f context=verify/verified -f description=",
 	} {
 		if !strings.Contains(log, want) {
 			t.Errorf("log lacks %q:\n%s", want, log)

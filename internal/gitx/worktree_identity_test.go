@@ -9,7 +9,7 @@ import (
 func TestTrackedIdentityAndDurableQuarantine(t *testing.T) {
 	r, _ := fixture(t.Context(), t)
 	sha := head(t.Context(), t, r)
-	dir := filepath.Join(r.CommonDir, "gate", "worktrees", "identity")
+	dir := filepath.Join(r.CommonDir, "verify", "worktrees", "identity")
 	if err := r.ResetWorktree(t.Context(), dir, sha, nil); err != nil {
 		t.Fatal(err)
 	}

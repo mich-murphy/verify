@@ -37,7 +37,7 @@ type view struct {
 func gather(env *Env) (*view, *viewErr) {
 	repo, err := gitx.Open(env.Ctx, env.Dir)
 	if err != nil {
-		return nil, &viewErr{ExitBlocked, "not a git repository: " + err.Error(), "run gate inside a git work tree"}
+		return nil, &viewErr{ExitBlocked, "not a git repository: " + err.Error(), "run verify inside a git work tree"}
 	}
 	sha, err := repo.Head(env.Ctx)
 	if err != nil {
@@ -46,7 +46,7 @@ func gather(env *Env) (*view, *viewErr) {
 	loaded, err := config.Load(env.Ctx, repo, sha)
 	if err != nil {
 		if errors.Is(err, config.ErrInvalid) {
-			return nil, &viewErr{ExitUsage, err.Error(), "fix gate.yaml"}
+			return nil, &viewErr{ExitUsage, err.Error(), "fix verify.yaml"}
 		}
 		return nil, &viewErr{ExitBlocked, err.Error(), "make sure the base branch exists"}
 	}
@@ -88,7 +88,7 @@ func gather(env *Env) (*view, *viewErr) {
 func runStatus(env *Env) int {
 	fs := env.Flags("status")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("status", ExitUsage, "usage: gate status [--json]", "fix the arguments")
+		return env.Fail("status", ExitUsage, "usage: verify status [--json]", "fix the arguments")
 	}
 	v, verr := gather(env)
 	if verr != nil {

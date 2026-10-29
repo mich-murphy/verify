@@ -29,7 +29,7 @@ func (r *Repo) AssertWorktreeIdentity(ctx context.Context, dir, sha string) erro
 }
 
 // WorktreeQuarantine persists in-progress ownership and incomplete cleanup across
-// Gate invocations. A marker left by a crash requires explicit human recovery.
+// Verify invocations. A marker left by a crash requires explicit human recovery.
 func WorktreeQuarantine(path string) string { return path + ".quarantine" }
 
 func CheckWorktreeQuarantine(path string) error {
@@ -53,8 +53,8 @@ func BeginWorktreeUse(path string) (release func() error, err error) {
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
 	}
-	content := fmt.Sprintf("worktree in use; if Gate exited unexpectedly, inspect owned processes before removing this marker\nowner: %x\n", nonce)
-	// #nosec G304 -- Marker path derives from a locked Gate-owned worktree path.
+	content := fmt.Sprintf("worktree in use; if Verify exited unexpectedly, inspect owned processes before removing this marker\nowner: %x\n", nonce)
+	// #nosec G304 -- Marker path derives from a locked Verify-owned worktree path.
 	f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func checkOwnedMarker(marker string, info os.FileInfo, content string) error {
 	if !current.Mode().IsRegular() || !os.SameFile(info, current) {
 		return fmt.Errorf("worktree marker was replaced; refusing to remove %s", marker)
 	}
-	// #nosec G304 -- Marker path derives from a locked Gate-owned worktree path.
+	// #nosec G304 -- Marker path derives from a locked Verify-owned worktree path.
 	f, err := os.Open(marker)
 	if err != nil {
 		return err

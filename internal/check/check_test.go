@@ -36,7 +36,7 @@ func put(t *testing.T, dir, name, content string) {
 	}
 }
 
-// newRepo builds main + feature with the given gate.yaml on main and one change on feature.
+// newRepo builds main + feature with the given verify.yaml on main and one change on feature.
 func newRepo(t *testing.T, yaml string, prekConfig bool) *gitx.Repo {
 	t.Helper()
 	for _, kv := range os.Environ() {
@@ -51,7 +51,7 @@ func newRepo(t *testing.T, yaml string, prekConfig bool) *gitx.Repo {
 		t.Fatal(err)
 	}
 	git(t, dir, "init", "-q", "-b", "main")
-	put(t, dir, "gate.yaml", yaml)
+	put(t, dir, "verify.yaml", yaml)
 	put(t, dir, "a.go", "package a\n")
 	if prekConfig {
 		put(t, dir, ".pre-commit-config.yaml", "repos: []\n")
@@ -96,7 +96,7 @@ func TestPrepareRunsFirstAndFailureSkipsRest(t *testing.T) {
 	if f := out.Record.Findings; !slices.ContainsFunc(f, func(x state.Finding) bool { return x.ID == "check:prepare-deps" }) {
 		t.Fatalf("%+v", f)
 	}
-	if _, err := os.Stat(filepath.Join(repo.CommonDir, "gate", "worktrees", "check")); err != nil {
+	if _, err := os.Stat(filepath.Join(repo.CommonDir, "verify", "worktrees", "check")); err != nil {
 		t.Fatalf("worktree not kept for reuse: %v", err)
 	}
 }
@@ -110,7 +110,7 @@ func TestPrepareTimeoutAndMissingTool(t *testing.T) {
 	}
 }
 
-// With no prepare: in gate.yaml, the root lockfile in the worktree decides.
+// With no prepare: in verify.yaml, the root lockfile in the worktree decides.
 func TestDerivedPrepareFromLockfile(t *testing.T) {
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte("#!/bin/sh\ntouch installed\n"), 0o700); err != nil { // #nosec G306 -- fake executable
@@ -269,7 +269,7 @@ func TestWorktreeReusedAcrossRuns(t *testing.T) {
 	if _, err := Run(t.Context(), repo, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	wt := filepath.Join(repo.CommonDir, "gate", "worktrees", "check")
+	wt := filepath.Join(repo.CommonDir, "verify", "worktrees", "check")
 	if _, err := os.Stat(filepath.Join(wt, "stale")); err != nil {
 		t.Fatal("stale marker should exist after run 1")
 	}
@@ -292,7 +292,7 @@ func TestWorktreeReusedAcrossRuns(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(wt, "node_modules", "keep")); err != nil {
 		t.Fatalf("node_modules not kept: %v", err)
 	}
-	ents, _ := os.ReadDir(filepath.Join(repo.CommonDir, "gate", "worktrees"))
+	ents, _ := os.ReadDir(filepath.Join(repo.CommonDir, "verify", "worktrees"))
 	n := 0
 	for _, e := range ents {
 		if e.IsDir() {
@@ -371,7 +371,7 @@ func TestFastGuardsWorkingTreeIncludingUntracked(t *testing.T) {
 	if !slices.ContainsFunc(out.Record.Findings, func(f state.Finding) bool { return f.Rule == "guard:suppressions" && f.Path == "new.go" }) {
 		t.Fatalf("untracked guard bypass: %+v", out.Record.Findings)
 	}
-	if _, err := os.Stat(filepath.Join(repo.CommonDir, "gate", "runs", out.Record.SHA, "check.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo.CommonDir, "verify", "runs", out.Record.SHA, "check.json")); !os.IsNotExist(err) {
 		t.Fatalf("fast mode wrote state evidence: %v", err)
 	}
 }
@@ -434,7 +434,7 @@ func TestCheckLogWriteFailureFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logDir := filepath.Join(repo.CommonDir, "gate", "runs", sha, "logs")
+	logDir := filepath.Join(repo.CommonDir, "verify", "runs", sha, "logs")
 	if err = os.MkdirAll(logDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,7 @@ func repo(t *testing.T, verifyYAML, touch string) *gitx.Repo {
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	git(t, dir, "init", "-q", "-b", "main")
-	put(t, dir, "gate.yaml", "base: main\n"+verifyYAML, 0o600)
+	put(t, dir, "verify.yaml", "base: main\n"+verifyYAML, 0o600)
 	put(t, dir, "tool.sh", "#!/bin/sh\ncat\nexit 3\n", 0o755)
 	put(t, dir, "cmd/x.go", "package x\n", 0o600)
 	git(t, dir, "add", ".")
@@ -78,13 +78,13 @@ func TestRun(t *testing.T) {
 		{"equals is exact", hdr + "    - {name: a, run: [./tool.sh], stdin: \"hi\\n\", exit: 3, stdout_equals: hi}\n", "cmd/y.go", NoGo, "verify:scenario:a", 2},
 		{"setup scenario name", hdr + "    - {name: setup, run: [./tool.sh], exit: 3}\n", "cmd/y.go", Go, "", 2},
 		{"inconclusive scenario name", hdr + "    - {name: inconclusive, run: [./tool.sh], exit: 0}\n", "cmd/y.go", NoGo, "verify:scenario:inconclusive", 2},
-		{"missing binary", hdr + "    - {name: a, run: [.gate-bin/nope], exit: 0}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 1},
+		{"missing binary", hdr + "    - {name: a, run: [.verify-bin/nope], exit: 0}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 1},
 		{"command not found", hdr + "    - {name: a, run: [nonexistent-cmd-xyz], exit: 0}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 2},
 		{"timeout", hdr + "    - {name: a, run: [sleep, \"5\"], exit: 0, timeout: 200ms}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 2},
 		{"setup fails", strings.Replace(hdr, "exit 0", "exit 4", 1) + "    - {name: a, run: [./tool.sh], exit: 3}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 1},
-		{"multiple inconclusive", hdr + "    - {name: a, run: [.gate-bin/missing-a], exit: 0}\n    - {name: b, run: [.gate-bin/missing-b], exit: 0}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 1},
-		{"mixed no-go and multiple inconclusive", hdr + "    - {name: a, run: [./tool.sh], exit: 0}\n    - {name: b, run: [.gate-bin/missing-b], exit: 0}\n    - {name: c, run: [.gate-bin/missing-c], exit: 0}\n", "cmd/y.go", NoGo, "verify:scenario:a", 2},
-		{"no-go wins over inconclusive", hdr + "    - {name: a, run: [./tool.sh], exit: 0}\n    - {name: b, run: [.gate-bin/nope], exit: 0}\n", "cmd/y.go", NoGo, "verify:scenario:a", 2},
+		{"multiple inconclusive", hdr + "    - {name: a, run: [.verify-bin/missing-a], exit: 0}\n    - {name: b, run: [.verify-bin/missing-b], exit: 0}\n", "cmd/y.go", Inconclusive, "verify:inconclusive", 1},
+		{"mixed no-go and multiple inconclusive", hdr + "    - {name: a, run: [./tool.sh], exit: 0}\n    - {name: b, run: [.verify-bin/missing-b], exit: 0}\n    - {name: c, run: [.verify-bin/missing-c], exit: 0}\n", "cmd/y.go", NoGo, "verify:scenario:a", 2},
+		{"no-go wins over inconclusive", hdr + "    - {name: a, run: [./tool.sh], exit: 0}\n    - {name: b, run: [.verify-bin/nope], exit: 0}\n", "cmd/y.go", NoGo, "verify:scenario:a", 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestAssertionPresenceAndStartFailures(t *testing.T) {
 	tests := []struct{ name, scenario, want string }{
 		{"empty equality", `    - {name: a, run: [./tool.sh], stdin: hi, exit: 3, stdout_equals: ""}` + "\n", NoGo},
 		{"real exit 127", `    - {name: a, run: [/bin/sh, -c, "exit 127"], exit: 127}` + "\n", Go},
-		{"nonexistent expected 127", `    - {name: a, run: [nonexistent-gate-cmd-xyz], exit: 127}` + "\n", Inconclusive},
+		{"nonexistent expected 127", `    - {name: a, run: [nonexistent-verify-cmd-xyz], exit: 127}` + "\n", Inconclusive},
 		{"truncated contains unknown", `    - {name: a, run: [/bin/sh, -c, "head -c 1048577 /dev/zero | tr '\\000' x"], exit: 0, stdout_contains: absent}` + "\n", Inconclusive},
 	}
 	for _, tc := range tests {
@@ -180,7 +180,7 @@ func TestVerifyLogWriteFailureFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logs := filepath.Join(r.CommonDir, "gate", "runs", sha, "logs")
+	logs := filepath.Join(r.CommonDir, "verify", "runs", sha, "logs")
 	if err = os.MkdirAll(filepath.Dir(logs), 0o700); err != nil {
 		t.Fatal(err)
 	}

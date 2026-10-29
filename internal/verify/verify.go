@@ -1,4 +1,4 @@
-// Package verify implements `gate verify` (SPEC §6): run configured CLI
+// Package verify implements `verify verify` (SPEC §6): run configured CLI
 // scenarios in a detached worktree when a declared surface changed.
 package verify
 
@@ -88,7 +88,7 @@ func runInWorktree(ctx context.Context, repo *gitx.Repo, store *state.Store, sha
 	if err = gitx.CheckWorktreeQuarantine(wt); err != nil {
 		return err
 	}
-	// Claim ownership before reset, setup or any scenario; a killed Gate
+	// Claim ownership before reset, setup or any scenario; a killed Verify
 	// process cannot silently release the right to reuse its running worktree.
 	release, err := gitx.BeginWorktreeUse(wt)
 	if err != nil {
@@ -216,7 +216,7 @@ func (w *work) exec(ctx context.Context, name string, argv []string, stdin []byt
 		}
 	}
 	if r.Error != "" {
-		fmt.Fprintf(&log, "\n--- gate: %s (%s) ---\n", r.Status, r.Error)
+		fmt.Fprintf(&log, "\n--- verify: %s (%s) ---\n", r.Status, r.Error)
 	}
 	p, perr := w.store.LogPath(w.rec.SHA, name)
 	if perr != nil {

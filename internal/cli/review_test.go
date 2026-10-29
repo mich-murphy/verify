@@ -33,7 +33,7 @@ func fakeReviewer(t *testing.T, outs ...string) string {
 		if raw, ok := strings.CutPrefix(o, "!"); ok {
 			body = raw
 		}
-		cases.WriteString(strconv.Itoa(i) + `) /bin/cat <<'EOF_GATE'` + "\n" + body + "\nEOF_GATE\n;;\n")
+		cases.WriteString(strconv.Itoa(i) + `) /bin/cat <<'EOF_VERIFY'` + "\n" + body + "\nEOF_VERIFY\n;;\n")
 	}
 	last := strconv.Itoa(len(outs) - 1)
 	script := "#!/bin/sh\n/bin/cat > '" + filepath.Join(dir, "packet") + "'\nread n < '" + counter + "'\necho $((n+1)) > '" + counter + "'\n" +
@@ -92,8 +92,8 @@ func checked(t *testing.T) string {
 func TestReviewNeedsCheck(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "a.go", "package a\n\nvar X = 1\n")
-	r, code := gate(t, "review")
-	if code != ExitBlocked || r.NextAction != "gate check" {
+	r, code := runCLI(t, "review")
+	if code != ExitBlocked || r.NextAction != "verify check" {
 		t.Fatalf("%d %+v", code, r)
 	}
 }
@@ -101,7 +101,7 @@ func TestReviewNeedsCheck(t *testing.T) {
 func TestReviewDocsLane(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "README.md", "changed\n")
-	r, code := gate(t, "review")
+	r, code := runCLI(t, "review")
 	if code != 0 || !strings.Contains(r.Message, "review not required") {
 		t.Fatalf("%d %+v", code, r)
 	}
@@ -110,7 +110,7 @@ func TestReviewDocsLane(t *testing.T) {
 func TestReviewPassAndBlockAndDelta(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, blockOut, fixedOut)
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitFindings || len(r.Findings) != 1 || r.Findings[0].ID != "F1" || r.Findings[0].Severity != "block" {
 		t.Fatalf("%d %+v", code, r)
 	}
@@ -120,7 +120,7 @@ func TestReviewPassAndBlockAndDelta(t *testing.T) {
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
 	passCheck(t, repo)
-	r, code = gate(t, "review", "--reviewer", "claude")
+	r, code = runCLI(t, "review", "--reviewer", "claude")
 	if code != 0 || r.Status != "pass" || len(r.Findings) != 0 {
 		t.Fatalf("%d %+v", code, r)
 	}
@@ -131,12 +131,12 @@ func TestReviewPassAndBlockAndDelta(t *testing.T) {
 	// Budget (2) is now exhausted: the next review parks the branch.
 	commit(t, repo, "a.go", "package a\n\nvar X = 3\n")
 	passCheck(t, repo)
-	r, code = gate(t, "review", "--reviewer", "claude")
+	r, code = runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitBlocked || !loadBranch(t, repo).Parked || calls(t, counter) != 2 {
 		t.Fatalf("%d %+v", code, r)
 	}
-	r, code = gate(t, "review", "--reviewer", "claude")
-	if code != ExitBlocked || r.NextAction != "gate decide accept the open findings, then gate decide approve" {
+	r, code = runCLI(t, "review", "--reviewer", "claude")
+	if code != ExitBlocked || r.NextAction != "verify decide accept the open findings, then verify decide approve" {
 		t.Fatalf("%d %+v", code, r)
 	}
 }
@@ -144,12 +144,12 @@ func TestReviewPassAndBlockAndDelta(t *testing.T) {
 func TestCleanSecondReviewUsesDelta(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, cleanOut, cleanOut)
-	if r, code := gate(t, "review", "--reviewer", "claude"); code != 0 {
+	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != 0 {
 		t.Fatalf("initial: %d %+v", code, r)
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
 	passCheck(t, repo)
-	if r, code := gate(t, "review", "--reviewer", "claude"); code != 0 {
+	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != 0 {
 		t.Fatalf("second: %d %+v", code, r)
 	}
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(counter), "packet"))
@@ -168,15 +168,15 @@ func TestCleanSecondReviewUsesDelta(t *testing.T) {
 func TestAcceptedFindingCanGenuinelyRecur(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, blockOut, blockOut)
-	if _, code := gate(t, "review", "--reviewer", "claude"); code != ExitFindings {
+	if _, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitFindings {
 		t.Fatalf("initial review: %d", code)
 	}
-	if _, code := gate(t, "decide", "accept", "F1", "--reason", "intentional old behavior"); code != ExitOK {
+	if _, code := runCLI(t, "decide", "accept", "F1", "--reason", "intentional old behavior"); code != ExitOK {
 		t.Fatalf("accept: %d", code)
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
 	passCheck(t, repo)
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitFindings || len(r.Findings) != 1 || r.Findings[0].ID != "F2" {
 		t.Fatalf("recurrence should be new ID: %d %+v", code, r)
 	}
@@ -196,7 +196,7 @@ func TestAcceptedFindingCanGenuinelyRecur(t *testing.T) {
 func TestAcceptRecordedFindingAfterBranchHistoryLost(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, blockOut)
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitFindings || r.Findings[0].ID != "F1" {
 		t.Fatalf("initial: %d %+v", code, r)
 	}
@@ -204,18 +204,18 @@ func TestAcceptRecordedFindingAfterBranchHistoryLost(t *testing.T) {
 	if err := os.Remove(st.BranchPath("feature")); err != nil {
 		t.Fatal(err)
 	}
-	s, _ := gate(t, "status")
+	s, _ := runCLI(t, "status")
 	if !strings.Contains(s.Message, "blocking: F1") {
 		t.Fatalf("immutable finding disappeared: %+v", s)
 	}
-	if _, code = gate(t, "decide", "accept", "F1", "--reason", "human accepts risk"); code != ExitOK {
+	if _, code = runCLI(t, "decide", "accept", "F1", "--reason", "human accepts risk"); code != ExitOK {
 		t.Fatalf("accept recorded-only finding: %d", code)
 	}
 	b := loadBranch(t, repo)
 	if len(b.Findings) != 1 || b.Findings[0].State != state.StateAccepted || len(b.Decisions) != 1 {
 		t.Fatalf("disposition not persisted: %+v", b)
 	}
-	s, _ = gate(t, "status")
+	s, _ = runCLI(t, "status")
 	if strings.Contains(s.Message, "blocking: F1") || !strings.Contains(s.Message, "eligible: yes") || s.Findings[0].State != state.StateAccepted {
 		t.Fatalf("accept not effective: %+v", s)
 	}
@@ -248,7 +248,7 @@ func TestConcurrentReviewsDoNotOverspend(t *testing.T) {
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
 	passCheck(t, repo)
-	if r, code := gate(t, "review", "--reviewer", "claude"); code != ExitOK || r.Status != state.StatusPass {
+	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitOK || r.Status != state.StatusPass {
 		t.Fatalf("repair delta: %d %+v", code, r)
 	}
 	b = loadBranch(t, repo)
@@ -257,7 +257,7 @@ func TestConcurrentReviewsDoNotOverspend(t *testing.T) {
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 3\n")
 	passCheck(t, repo)
-	if r, code := gate(t, "review", "--reviewer", "claude"); code != ExitBlocked || !loadBranch(t, repo).Parked || calls(t, counter) != 2 {
+	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitBlocked || !loadBranch(t, repo).Parked || calls(t, counter) != 2 {
 		t.Fatalf("attempted third review should park: %d %+v", code, r)
 	}
 }
@@ -265,10 +265,10 @@ func TestConcurrentReviewsDoNotOverspend(t *testing.T) {
 func TestFailedReviewSameSHAReusesFailure(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, blockOut, cleanOut)
-	if r, code := gate(t, "review", "--reviewer", "claude"); code != ExitFindings || r.Status != state.StatusFail {
+	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitFindings || r.Status != state.StatusFail {
 		t.Fatalf("initial: %d %+v", code, r)
 	}
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitFindings || r.Status != state.StatusFail || len(r.Findings) != 1 || calls(t, counter) != 1 || loadBranch(t, repo).ReviewCalls != 1 {
 		t.Fatalf("failed record must not silently pass: %d %+v calls %d", code, r, calls(t, counter))
 	}
@@ -278,10 +278,10 @@ func TestFailedReviewSameSHAReusesFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, code := gate(t, "decide", "accept", "F1", "--reason", "human accepts this risk"); code != ExitOK {
+	if _, code := runCLI(t, "decide", "accept", "F1", "--reason", "human accepts this risk"); code != ExitOK {
 		t.Fatalf("accept: %d", code)
 	}
-	r, code = gate(t, "review", "--reviewer", "claude")
+	r, code = runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitOK || r.Status != state.StatusPass || !strings.Contains(r.Message, "stored raw review failed") {
 		t.Fatalf("accepted effective review should pass: %d %+v", code, r)
 	}
@@ -301,7 +301,7 @@ func TestFailedReviewSameSHAReusesFailure(t *testing.T) {
 func TestReviewInvalidRetriedOnce(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, `{"findings":[{"bogus":1}],"resolved":[]}`, cleanOut)
-	_, code := gate(t, "review", "--reviewer", "claude")
+	_, code := runCLI(t, "review", "--reviewer", "claude")
 	branch := loadBranch(t, repo)
 	if code != 0 || calls(t, counter) != 2 || branch.ReviewCalls != 1 || branch.ReviewAttempts != 2 {
 		t.Fatalf("code %d calls %d branch %+v", code, calls(t, counter), branch)
@@ -311,7 +311,7 @@ func TestReviewInvalidRetriedOnce(t *testing.T) {
 	if err != nil || rec.CallsUsed != 1 || rec.Attempts != 2 {
 		t.Fatalf("invalid retry logical/attempt evidence: %+v %v", rec, err)
 	}
-	s, _ := gate(t, "status")
+	s, _ := runCLI(t, "status")
 	if !strings.Contains(s.Message, "review subprocess attempts: 2 total") || !strings.Contains(s.Message, "review attempts for SHA: 2") {
 		t.Fatalf("attempts missing from status: %+v", s)
 	}
@@ -320,7 +320,7 @@ func TestReviewInvalidRetriedOnce(t *testing.T) {
 func TestReviewInvalidTwiceFails(t *testing.T) {
 	repo := checked(t)
 	counter := fakeReviewer(t, `{"nope":1}`)
-	_, code := gate(t, "review", "--reviewer", "claude")
+	_, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
 	if code != ExitBlocked || calls(t, counter) != 2 || b.ReviewCalls != 1 || b.ReviewAttempts != 2 {
 		t.Fatalf("code %d calls %d branch %+v", code, calls(t, counter), b)
@@ -330,7 +330,7 @@ func TestReviewInvalidTwiceFails(t *testing.T) {
 func TestReviewRateLimitConsumesNothing(t *testing.T) {
 	repo := checked(t)
 	fakeReviewer(t, `!{"is_error":true,"result":"usage limit reached"}`)
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
 	if code != ExitBlocked || b.ReviewCalls != 0 || b.ReviewAttempts != 1 || !strings.Contains(r.NextAction, "doctor") {
 		t.Fatalf("%d %+v branch %+v", code, r, b)
@@ -339,7 +339,7 @@ func TestReviewRateLimitConsumesNothing(t *testing.T) {
 
 func TestReviewMissingCLI(t *testing.T) {
 	repo := checked(t)
-	_, code := gate(t, "review", "--reviewer", "claude")
+	_, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
 	if code != ExitBlocked || b.ReviewCalls != 0 || b.ReviewAttempts != 1 {
 		t.Fatalf("code %d branch %+v", code, b)
@@ -348,10 +348,10 @@ func TestReviewMissingCLI(t *testing.T) {
 
 func TestReviewUsageErrors(t *testing.T) {
 	checked(t)
-	if _, code := gate(t, "review", "--reviewer", "gpt"); code != ExitUsage {
+	if _, code := runCLI(t, "review", "--reviewer", "gpt"); code != ExitUsage {
 		t.Fatalf("code %d", code)
 	}
-	if _, code := gate(t, "review", "--intent", "/nonexistent"); code != ExitUsage {
+	if _, code := runCLI(t, "review", "--intent", "/nonexistent"); code != ExitUsage {
 		t.Fatalf("code %d", code)
 	}
 }
@@ -361,7 +361,7 @@ func TestReviewIntentAndTooLarge(t *testing.T) {
 	fakeReviewer(t, cleanOut)
 	intent := filepath.Join(t.TempDir(), "intent.txt")
 	write(t, filepath.Dir(intent), "intent.txt", "why\n")
-	if _, code := gate(t, "review", "--reviewer", "claude", "--intent", intent); code != 0 {
+	if _, code := runCLI(t, "review", "--reviewer", "claude", "--intent", intent); code != 0 {
 		t.Fatalf("code %d", code)
 	}
 	// A 300 KiB change exceeds the packet bound.
@@ -369,7 +369,7 @@ func TestReviewIntentAndTooLarge(t *testing.T) {
 	commit(t, repo2, "a.go", "package a\n\n// "+strings.Repeat("x", 300<<10)+"\n")
 	passCheck(t, repo2)
 	fakeReviewer(t, cleanOut)
-	r, code := gate(t, "review", "--reviewer", "claude")
+	r, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitBlocked || !strings.Contains(r.NextAction, "split") {
 		t.Fatalf("%d %+v", code, r)
 	}

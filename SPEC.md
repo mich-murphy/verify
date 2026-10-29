@@ -1,9 +1,9 @@
-# Gate v1 — specification
+# Verify v1 — specification
 
-Gate is a local CLI for one developer working with AI coding agents. It checks every
-commit using the repository's own tools plus a few guards that Gate owns. It then asks one
+Verify is a local CLI for one developer working with AI coding agents. It checks every
+commit using the repository's own tools plus a few guards that Verify owns. It then asks one
 fresh reviewer once, exercises changed CLI surfaces, and pushes only the exact commit it
-checked. The author agent fixes whatever Gate finds; Gate only reports.
+checked. The author agent fixes whatever Verify finds; Verify only reports.
 
 This is the normative specification for the public implementation. Tests and original synthetic
 review examples live in this repository; development archives are not part of the public release.
@@ -13,22 +13,22 @@ review examples live in this repository; development archives are not part of th
 1. Deterministic checks run first on every commit, scoped to the change's blast radius (§4.2);
    CI runs them in full. No lane skips them.
 2. Validate the exact commit you push. Every record is bound to a commit SHA.
-3. Evidence comes from Gate's own runs, never from an agent's report.
+3. Evidence comes from Verify's own runs, never from an agent's report.
 4. Judge and worker are separate. The reviewer is a fresh call with no tools, from a different
    model family by default. It never sees test results or the author's reasoning.
-5. The author fixes; Gate never edits source, commits, rebases or merges.
+5. The author fixes; Verify never edits source, commits, rebases or merges.
 6. Every loop has a budget. Requiring another review beyond the budget parks the branch;
    shipping a parked branch requires explicit human decisions for the current SHA.
 7. Silence by default. Block only on the short list in §8; everything else is a note.
 8. Repository config is code. Changes to quality config raise the lane; they are not silently trusted.
 9. Start with the smallest version and let measurements add the rest.
 
-Threat model: Gate is cooperative. The `gate/verified` status is a guard against forgetting, not
-against a determined attacker. Gate does not protect against the authoring session.
+Threat model: Verify is cooperative. The `verify/verified` status is a guard against forgetting, not
+against a determined attacker. Verify does not protect against the authoring session.
 
 Platforms are macOS and Linux. GitHub is the only host.
 
-Out of scope: daemon/proxy, Gate-made commits, rebase, CI watching, unbounded review loops or
+Out of scope: daemon/proxy, Verify-made commits, rebase, CI watching, unbounded review loops or
 additional reviewer stages, TUI/DB, Windows, hostile-code sandboxing, and billed model APIs. The reviewer uses subscription
 CLIs.
 
@@ -36,17 +36,17 @@ CLIs.
 
 | Command | Purpose |
 |---|---|
-| `gate check [--sha REF] [--fast]` | Run guards, the setup audit and the repository checks on the exact commit (§4). |
-| `gate review [--intent FILE] [--reviewer auto\|claude\|codex]` | Run one fresh review, or a delta review after a repair (§5). |
-| `gate verify` | Run the configured CLI scenarios when a declared surface changed (§6). |
-| `gate ship [--dry-run] [--remote NAME]` | Push the exact commit (to `origin` by default), open or update the PR, and set the `gate/verified` status (§7). |
-| `gate decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current SHA. |
-| `gate status` | Show the lane, step results, open findings, budgets and the next action for HEAD. |
-| `gate setup [--apply]` | Run the static setup audit (§4.3) and print guidance. `--apply` onboards the repository: it writes what is missing and installs the hooks (§4.3.1). |
-| `gate doctor` | Check that git, prek, gh and the reviewer CLIs are available and authenticated, without printing secrets. |
-| `gate agent-hook` | Read an agent tool-call JSON on stdin and exit 2 to block hook bypasses (§9). |
+| `verify check [--sha REF] [--fast]` | Run guards, the setup audit and the repository checks on the exact commit (§4). |
+| `verify review [--intent FILE] [--reviewer auto\|claude\|codex]` | Run one fresh review, or a delta review after a repair (§5). |
+| `verify verify` | Run the configured CLI scenarios when a declared surface changed (§6). |
+| `verify ship [--dry-run] [--remote NAME]` | Push the exact commit (to `origin` by default), open or update the PR, and set the `verify/verified` status (§7). |
+| `verify decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current SHA. |
+| `verify status` | Show the lane, step results, open findings, budgets and the next action for HEAD. |
+| `verify setup [--apply]` | Run the static setup audit (§4.3) and print guidance. `--apply` onboards the repository: it writes what is missing and installs the hooks (§4.3.1). |
+| `verify doctor` | Check that git, prek, gh and the reviewer CLIs are available and authenticated, without printing secrets. |
+| `verify agent-hook` | Read an agent tool-call JSON on stdin and exit 2 to block hook bypasses (§9). |
 
-Every command accepts `--json` and prints one `gate.result/1` object. Exit codes:
+Every command accepts `--json` and prints one `verify.result/1` object. Exit codes:
 
 | Code | Meaning |
 |---|---|
@@ -61,7 +61,7 @@ Every non-zero result carries `next_action`.
 
 ### Configuration
 
-Gate needs no configuration file. Everything that can be derived is derived:
+Verify needs no configuration file. Everything that can be derived is derived:
 
 | Setting | Source |
 |---|---|
@@ -69,10 +69,10 @@ Gate needs no configuration file. Everything that can be derived is derived:
 | Profile | Root files: `go.mod` is go; `package.json` is typescript; both is mixed |
 | Stages | Fixed: `pre-commit`, then `pre-push` (§4.5) |
 | Prepare | The root lockfile, else the single immediate subdirectory holding one (run there with the manager's directory flag): `npm ci`, `pnpm install --frozen-lockfile`, `bun install --frozen-lockfile` or `yarn install --immutable`; none for Go |
-| Reviewer | The person running Gate, through the environment: `GATE_REVIEWER` (`auto`, `claude` or `codex`; default `auto`), `GATE_CLAUDE_MODEL` (default `opus`), `GATE_CODEX_MODEL` (default: the CLI's own) |
+| Reviewer | The person running Verify, through the environment: `VERIFY_REVIEWER` (`auto`, `claude` or `codex`; default `auto`), `VERIFY_CLAUDE_MODEL` (default `opus`), `VERIFY_CODEX_MODEL` (default: the CLI's own) |
 | Limits | Fixed: 2 logical reviews per branch, each with at most one invalid-output retry (§5); Sign-off above 400 changed lines |
 
-An optional `gate.yaml` in the repository root holds only facts about the repository that cannot
+An optional `verify.yaml` in the repository root holds only facts about the repository that cannot
 be derived. Every key is optional, and an unknown key is an error:
 
 ```yaml
@@ -84,10 +84,10 @@ prepare:                      # only when the lockfile does not describe the ins
 signoff_paths: ["internal/state/**"]   # extra critical paths
 verify:                       # CLI scenarios (§6)
   surfaces: ["cmd/**"]
-  setup: [go, build, -o, .gate-bin/gate, ./cmd/gate]
+  setup: [go, build, -o, .verify-bin/verify, ./cmd/verify]
   scenarios:
     - name: help
-      run: [.gate-bin/gate, --help]
+      run: [.verify-bin/verify, --help]
       exit: 0
       stdout_contains: "usage"
 waivers:                      # setup obligations waived, each with a reason
@@ -95,30 +95,30 @@ waivers:                      # setup obligations waived, each with a reason
 ```
 
 Policy discovery starts at the merge-base with the derived default branch, independently of
-candidate config. A valid `gate.yaml` there governs, including its explicit `base`. Only when
+candidate config. A valid `verify.yaml` there governs, including its explicit `base`. Only when
 that trusted config is absent or invalid may the candidate's copy govern; this requires Sign-off.
-An explicit fallback target cannot select the candidate itself and hide the change. Gate computes
+An explicit fallback target cannot select the candidate itself and hide the change. Verify computes
 merge-bases against local `base` and `origin/<base>` where available. It uses the remote-derived
 result when that advances the local-derived result; otherwise it retains the local-derived result
-(or the sole available result). Repository checks belong in the prek config, not in `gate.yaml`.
+(or the sole available result). Repository checks belong in the prek config, not in `verify.yaml`.
 
 Configuration is a single YAML document. Commands require a nonempty executable and no NUL
 arguments; later argv elements may be empty strings. Scenario names are unique, expected exits
 are 0–255, and declared verification surfaces require at least one scenario.
 
 Prek config discovery is shared by audit, checks and onboarding, in this order: `prek.toml`,
-`.pre-commit-config.yaml`, `.pre-commit-config.yml`. Gate does not create a competing config.
+`.pre-commit-config.yaml`, `.pre-commit-config.yml`. Verify does not create a competing config.
 
 ### State
 
-State lives under `<git-common-dir>/gate/`. Linked worktrees share it, and it is never committed.
+State lives under `<git-common-dir>/verify/`. Linked worktrees share it, and it is never committed.
 
 | Path | Holds |
 |---|---|
-| `branches/<branch>.json` | `gate.branch/1`: logical reviews used, subprocess attempts, persistent review findings (Gate-assigned IDs `F1`, `F2`, …, with state `open`, `resolved` or `accepted`), the last reviewed SHA, the parked flag, and decisions. |
-| `runs/<sha>/check.json` | `gate.check/1` record. |
-| `runs/<sha>/review.json` | `gate.review/1` record. |
-| `runs/<sha>/verify.json` | `gate.verify/1` record. |
+| `branches/<branch>.json` | `verify.branch/1`: logical reviews used, subprocess attempts, persistent review findings (Verify-assigned IDs `F1`, `F2`, …, with state `open`, `resolved` or `accepted`), the last reviewed SHA, the parked flag, and decisions. |
+| `runs/<sha>/check.json` | `verify.check/1` record. |
+| `runs/<sha>/review.json` | `verify.review/1` record. |
+| `runs/<sha>/verify.json` | `verify.verify/1` record. |
 | `runs/<sha>/logs/<step>.log` | Step output. |
 | `lock` | Lock file. |
 
@@ -142,24 +142,24 @@ The lane is a pure function of the diff from the merge-base to the SHA, plus the
 |---|---|---|
 | Docs | Every changed path is `*.md`, under `docs/**`, or `CHANGELOG*`. | check |
 | Standard | Neither Docs nor Sign-off applies. | check, review, and verify if a surface changed |
-| Sign-off | The diff touches `gate.yaml`, prek or quality config (prek config, `.golangci*`, `tsconfig*`, linter, formatter and coverage configs, CI workflows), lock files with removed entries, or `signoff_paths`; or it changes more than 400 lines. | Standard's steps plus `gate decide approve` on that SHA |
+| Sign-off | The diff touches `verify.yaml`, prek or quality config (prek config, `.golangci*`, `tsconfig*`, linter, formatter and coverage configs, CI workflows), lock files with removed entries, or `signoff_paths`; or it changes more than 400 lines. | Standard's steps plus `verify decide approve` on that SHA |
 
 ## 4. Check
 
-`gate check` resolves the SHA (HEAD by default), the merge-base with `base` and the lane. It then
+`verify check` resolves the SHA (HEAD by default), the merge-base with `base` and the lane. It then
 runs these steps in the order given in §4.1–§4.4.
 
-All steps except the guards run in a Gate-owned detached worktree of the exact SHA. Full checks
+All steps except the guards run in a Verify-owned detached worktree of the exact SHA. Full checks
 do not check the user's uncommitted changes; `--fast` does (§4.5). If the working tree differs
-from the SHA, Gate prints a note. Repository execution must leave HEAD, the index and tracked
+from the SHA, Verify prints a note. Repository execution must leave HEAD, the index and tracked
 content at the checked SHA; changing tracked content fails the run rather than producing evidence
 for the original commit.
 
-The worktree is reused: `check` always uses `<git-common-dir>/gate/worktrees/check` (and `verify`
+The worktree is reused: `check` always uses `<git-common-dir>/verify/worktrees/check` (and `verify`
 uses `.../verify`), held under an exclusive lock file next to it, so concurrent runs in one
 repository wait rather than collide. Each run resets it to the SHA with `git checkout --detach
 --force <sha>` and `git clean -ffdx -e node_modules -e .turbo`, so it holds exactly the commit's
-tracked files plus installed dependencies and content-keyed tool caches. If the directory is missing or is not a valid worktree, Gate
+tracked files plus installed dependencies and content-keyed tool caches. If the directory is missing or is not a valid worktree, Verify
 removes it and adds it again. A stable path and unchanged file times keep tool caches valid, such
 as Go's test cache, which keys on both. `prepare:` still runs every time; a frozen-lockfile
 install over existing dependencies is fast.
@@ -168,7 +168,7 @@ Commands use one shared foreground runner with stdin, a timeout, bounded capture
 cleanup. Repository commands inherit the user's environment with `GIT_*` variables removed;
 reviewers use their separate allowlist (§5). A missing tool fails the step, never passes it.
 
-Before reset or repository execution, Gate writes a durable worktree ownership marker with a
+Before reset or repository execution, Verify writes a durable worktree ownership marker with a
 unique per-acquisition token. It removes the marker only after execution has settled and both
 file identity and bounded marker contents still match; inode identity alone can be reused. Interrupted
 or unsettled execution refuses later worktree reuse. Recovery is explicit: inspect and stop any
@@ -180,7 +180,7 @@ Guards run in-process over `git diff merge-base..sha`.
 
 | Guard | Fires when | Effect |
 |---|---|---|
-| `secrets` | betterleaks, linked into Gate as a Go library with its default rules, finds a secret in the commit range. No external scanner is needed. | Block |
+| `secrets` | betterleaks, linked into Verify as a Go library with its default rules, finds a secret in the commit range. No external scanner is needed. | Block |
 | `suppressions` | Added lines contain a lint or type suppression, a skipped test or a focused test (§4.1.1). | Block |
 | `tests-removed` | A test file is deleted, or test functions or cases are removed, without a replacement. | Block |
 | `generated` | The diff edits a file whose header marks it generated (`Code generated … DO NOT EDIT`, `@generated`). | Block |
@@ -194,28 +194,28 @@ The `suppressions` guard matches these patterns on added lines:
 - Type suppressions: `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`.
 - Skipped or focused tests: `t.Skip(`, `.skip(`, `.only(`, `xit(`, `xdescribe(`.
 
-The finding goes away when a `gate decide accept` on that SHA references the guard finding ID.
+The finding goes away when a `verify decide accept` on that SHA references the guard finding ID.
 
 ### 4.2 Repository checks
 
-Gate first runs each `prepare:` entry in the worktree (for example `npm ci`, because a fresh
+Verify first runs each `prepare:` entry in the worktree (for example `npm ci`, because a fresh
 worktree has no `node_modules`). A failing prepare step is a blocking `check:prepare-<name>`
 finding, and the remaining steps are skipped.
 
-Checks run only on the change's blast radius. Gate computes the scope once per run:
+Checks run only on the change's blast radius. Verify computes the scope once per run:
 
 - `full` when there is no merge-base, or when the change touches a file that can affect
   everything: a package manifest or lockfile (`go.mod`, `go.sum`, `package.json`, any lockfile),
   quality config (the Sign-off list in §3, which includes the prek config and CI workflows),
-  `gate.yaml`, or a task-runner file (`Makefile`, `justfile`, `Taskfile*`, `mise.toml`).
+  `verify.yaml`, or a task-runner file (`Makefile`, `justfile`, `Taskfile*`, `mise.toml`).
 - `affected` otherwise.
 
-For each stage, Gate runs `prek run --from-ref <merge-base> --to-ref <sha> --stage <stage>` when
+For each stage, Verify runs `prek run --from-ref <merge-base> --to-ref <sha> --stage <stage>` when
 the scope is `affected`, and `prek run --all-files --stage <stage>` when it is `full`, in the
 worktree and with the worktree's own prek config. On a scoped run prek runs only the hooks whose
 `files`/`types` match a changed file (plus `always_run` hooks), and exports
 `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` to them. Git's own pre-push hook sets the same
-variables, so one hook definition behaves the same under `git push` and `gate check`. Gate sets no
+variables, so one hook definition behaves the same under `git push` and `verify check`. Verify sets no
 variables of its own.
 
 The check record holds `scope` and, for `full`, the reason (`scope_reason`). `ship` accepts
@@ -258,9 +258,9 @@ accepted alternative, or has one as a `-`-separated prefix or suffix (`web-oxlin
 If `prek list` fails (for example, a remote hook repository cannot be fetched on a cold cache),
 the audit reports a blocking `setup:prek-config` finding that carries prek's error.
 
-Gate does not inspect what a hook runs: no tool or registry can certify that a hook named `lint`
+Verify does not inspect what a hook runs: no tool or registry can certify that a hook named `lint`
 lints. The assurance is that a change to the prek config is a Sign-off change (§3), so a person
-approves what each hook runs, and `gate check` runs every hook. `gate setup` prints every hook that met
+approves what each hook runs, and `verify check` runs every hook. `verify setup` prints every hook that met
 each obligation, so a mislabelled or wrongly matched hook is visible.
 
 **File obligations** are detected from the files themselves:
@@ -280,24 +280,24 @@ each obligation, so a mislabelled or wrongly matched hook is visible.
 A TypeScript project in a single nested directory (for example `web/`) is audited there when the
 root has no lockfile.
 
-Secret scanning is not an obligation, because the `secrets` guard runs inside Gate on every check.
+Secret scanning is not an obligation, because the `secrets` guard runs inside Verify on every check.
 
 A missing REQUIRED obligation is a blocking `setup:<obligation>` finding. It is cleared by fixing
 the config, or by a `waivers:` entry with a reason (which makes the change a Sign-off change). A
 missing RECOMMENDED obligation is a note.
 
-`gate setup` prints the same audit with concrete config snippets.
+`verify setup` prints the same audit with concrete config snippets.
 
 #### 4.3.1 Onboarding
 
-`gate setup --apply` onboards a repository. It fills in only what is missing and never overwrites
+`verify setup --apply` onboards a repository. It fills in only what is missing and never overwrites
 or reorders existing content:
 
-- It never writes `gate.yaml`.
+- It never writes `verify.yaml`.
 - It writes `.pre-commit-config.yaml` when no supported prek config exists. For a safely appendable
   existing YAML/YML config, it appends missing `repo: local` hooks with standard IDs. Existing
   TOML, or YAML whose layout cannot be extended safely, is preserved with manual guidance;
-  Gate does not rewrite it or create an alternative config. Stages and scoping follow §4.5.
+  Verify does not rewrite it or create an alternative config. Stages and scoping follow §4.5.
 - Each hook calls an existing entry point found by name only, without reading what it runs: a
   Make target, or a package script in the root or the single nested project (called with the
   manager's directory flag, `bun run --cwd web check-types`), whose name is the standard ID or an
@@ -314,7 +314,7 @@ or reorders existing content:
 
 An obligation that needs a code or tool-config change, such as enabling
 `noUncheckedIndexedAccess`, is printed rather than applied, because it can break the build. After
-applying, Gate reruns the audit and prints what remains. The written files are ordinary changes
+applying, Verify reruns the audit and prints what remains. The written files are ordinary changes
 that the author commits. Because they add prek config, the onboarding change is in the Sign-off
 lane.
 
@@ -325,7 +325,7 @@ deferred until intent capture exists.
 
 ### 4.5 Hook tiers
 
-This is the standard for which checks run at which prek stage. `gate setup --apply` writes hooks
+This is the standard for which checks run at which prek stage. `verify setup --apply` writes hooks
 to it. The audit reports a `setup:hook-tiers` note when a full-tier hook (typecheck, test,
 coverage, deadcode, vuln) runs at `pre-commit`; it does not inspect `files`/`types` scoping.
 
@@ -370,19 +370,19 @@ whole-project coverage floor, and import graphs miss hidden dependencies (fixtur
 files, environment). CI runs every check completely, with cache-defeating flags such as
 `-count=1 -shuffle=on`, before merge.
 
-`gate check --fast` runs the guards and the `pre-commit` stage in place, on local staged,
+`verify check --fast` runs the guards and the `pre-commit` stage in place, on local staged,
 unstaged and untracked changes, and writes no record. Agent hooks use it for quick feedback, and `ship` never
 accepts it. It prints the stage duration, and adds a `fast-tier-slow` note when that exceeds 5 s.
-The full `gate check` runs both stages on the exact commit, scoped as in §4.2.
+The full `verify check` runs both stages on the exact commit, scoped as in §4.2.
 
 ## 5. Review
 
-`gate review` requires an effective passing check on the exact SHA, current merge-base and lane.
+`verify review` requires an effective passing check on the exact SHA, current merge-base and lane.
 Docs changes do not require a review.
 
 ### Packet
 
-The packet is built by Gate. It contains:
+The packet is built by Verify. It contains:
 
 - The diff from the merge-base, or from the last reviewed SHA when it is an ancestor of the
   candidate, with surrounding context. Delta selection does not depend on the open-finding count.
@@ -424,10 +424,10 @@ Reviewer commands:
 
   Any tool or command event in the output stream invalidates the result.
 
-`GATE_REVIEWER` selects the reviewer; `--reviewer` overrides it. With `auto`, Gate picks the
-family other than the author's. The author's family is read from `GATE_AUTHOR` (`claude` or
+`VERIFY_REVIEWER` selects the reviewer; `--reviewer` overrides it. With `auto`, Verify picks the
+family other than the author's. The author's family is read from `VERIFY_AUTHOR` (`claude` or
 `codex`) or the Pi integration, and defaults to the codex reviewer. Reviewer choice is a property
-of the person running Gate, not of the repository, so it is never read from `gate.yaml`.
+of the person running Verify, not of the repository, so it is never read from `verify.yaml`.
 
 ### Response
 
@@ -439,7 +439,7 @@ The response follows one fixed JSON schema:
  "resolved":["F1"]}
 ```
 
-Gate validates the response strictly. It never repairs one, and it retries at most once on
+Verify validates the response strictly. It never repairs one, and it retries at most once on
 invalid output.
 
 - A `correctness` finding with a repro is blocking. Every other finding, and a correctness
@@ -457,7 +457,7 @@ Admission, invocation and publication are serialized per branch to prevent budge
 A valid recorded review for the exact SHA, merge-base and branch is reused without invoking a
 reviewer, spending budget or rewriting its raw result. Current decisions determine its effective
 findings. The final permitted clean review can pass. A further required review parks the branch;
-its open blocking findings then require `gate decide accept`, and `gate decide approve` is required
+its open blocking findings then require `verify decide accept`, and `verify decide approve` is required
 for the current SHA before shipping.
 
 A rate-limit or auth failure on the reviewer CLI is a blocked result (exit 3). A no-output
@@ -469,10 +469,10 @@ is not shipping eligibility: all other requirements, including a parked-branch d
 
 ## 6. Verify
 
-`gate verify` is required when a changed path matches `verify.surfaces`. Otherwise its verdict
+`verify verify` is required when a changed path matches `verify.surfaces`. Otherwise its verdict
 is `no-surface`.
 
-In a detached worktree of the SHA, Gate runs `verify.setup`, then each scenario. A scenario
+In a detached worktree of the SHA, Verify runs `verify.setup`, then each scenario. A scenario
 compares the exit code, and optionally `stdout_contains` or `stdout_equals`, with optional stdin.
 An explicit empty stdout assertion differs from an absent assertion. Expected nonzero exits are
 valid, but a process startup failure is not an observed exit. Truncated capture is inconclusive
@@ -485,13 +485,13 @@ only when the assertion cannot be decided; a provable mismatch remains a failure
 | `inconclusive` | Setup failed, a scenario could not complete, or bounded output left an assertion undecidable. This blocks until fixed or precisely waived. |
 
 Assertion failures take precedence over uncertainty: a mixed run is `no-go`, not waivable
-`inconclusive`. `gate decide waive verify` covers only a current, coherent `inconclusive` record
+`inconclusive`. `verify decide waive verify` covers only a current, coherent `inconclusive` record
 for the exact SHA and merge-base. It cannot waive missing evidence, `no-go`, or tracked-content
 mutation. Decisions never rewrite the recorded verdict.
 
 ## 7. Ship
 
-`gate ship` refuses (exit 3) unless all of the following hold:
+`verify ship` refuses (exit 3) unless all of the following hold:
 
 - HEAD equals the SHA, and the working tree is clean.
 - The lane's required steps have fresh, coherent evidence for the SHA and current merge-base,
@@ -500,16 +500,16 @@ mutation. Decisions never rewrite the recorded verdict.
 - The branch is not parked, or a decision covers it.
 - A Sign-off lane has an `approve` decision for that SHA.
 
-Gate then:
+Verify then:
 
 1. Resolves the selected remote's single push destination (default remote: `origin`), reads its
    branch tip, and pushes the exact SHA to that same destination with an explicit force-with-lease.
    Multiple push destinations or chained URL rewrites that could change the target fail closed.
 2. Opens or updates the PR with `gh` targeting that GitHub repository and host, with a body that
    summarises executed steps, effective findings and notes.
-3. Sets `gate/verified=success` on that SHA in the same repository through `gh api`.
+3. Sets `verify/verified=success` on that SHA in the same repository through `gh api`.
 
-Local evidence and reviewer claims are distinguished in the PR body. Gate does not claim remote
+Local evidence and reviewer claims are distinguished in the PR body. Verify does not claim remote
 CI passed, merge approval was granted, or rollback readiness was established. Shipping uses the
 caller's gh authentication; the selected repository must be writable by that identity.
 
@@ -530,20 +530,20 @@ Only these block a commit. Everything else is a note in `status` and the PR body
 
 ## 9. Agent integration
 
-`gate agent-hook` reads a tool-call JSON on stdin. It accepts either Pi's `{toolName,input}` or
+`verify agent-hook` reads a tool-call JSON on stdin. It accepts either Pi's `{toolName,input}` or
 Claude Code's `{tool_name,tool_input}`.
 
 It exits 2 with a reason when the call would:
 
 - Bypass hooks: `--no-verify`, `-n` on commit, `core.hooksPath`, or `SKIP=`/`PREK_SKIP`.
-- Edit hook or Gate config.
+- Edit hook or Verify config.
 
 This is noise reduction, not enforcement. `ship` re-checks everything.
 
-`integrations/pi/gate.ts` is the Pi extension. Its hooks are:
+`integrations/pi/verify.ts` is the Pi extension. Its hooks are:
 
-- `tool_call` calls `gate agent-hook`.
-- `agent_end` runs `gate check --fast`.
+- `tool_call` calls `verify agent-hook`.
+- `agent_end` runs `verify check --fast`.
 
 Claude Code hook examples are documented.
 
@@ -554,5 +554,5 @@ Claude Code hook examples are documented.
 3. Ship and decide. This is a working gate with no AI.
 4. Review through subscription CLIs.
 5. Verify scenarios, then the agent hook and Pi extension.
-6. Dogfood on Gate itself and on a TypeScript repository; measure; then consider the revert test
+6. Dogfood on Verify itself and on a TypeScript repository; measure; then consider the revert test
    and mutation testing in Sign-off.

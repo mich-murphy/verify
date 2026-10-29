@@ -1,4 +1,4 @@
-// Package guard implements the Gate-owned in-process guards (SPEC §4.1:
+// Package guard implements the Verify-owned in-process guards (SPEC §4.1:
 // secrets, suppressions, tests-removed, generated, config).
 //
 // Contract: Run inspects the diff from Input.Base to Input.SHA (read through

@@ -14,7 +14,7 @@ func TestComputeScope(t *testing.T) {
 		{"go.mod", "m", []string{"go.mod"}, ScopeFull},
 		{"nested lock", "m", []string{"web/pnpm-lock.yaml"}, ScopeFull},
 		{"bun.lockb", "m", []string{"bun.lockb"}, ScopeFull},
-		{"gate.yaml", "m", []string{"gate.yaml"}, ScopeFull},
+		{"verify.yaml", "m", []string{"verify.yaml"}, ScopeFull},
 		{"workflow", "m", []string{".github/workflows/ci.yml"}, ScopeFull},
 		{"prek yml", "m", []string{".pre-commit-config.yml"}, ScopeFull},
 		{"custom golangci", "m", []string{".golangci-custom.toml"}, ScopeFull},

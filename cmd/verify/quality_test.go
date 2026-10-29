@@ -4,9 +4,62 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestQualityFileInventory(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git := func(args ...string) {
+		t.Helper()
+		// #nosec G204 -- Fixed git executable and fixture-only arguments.
+		cmd := exec.CommandContext(t.Context(), "git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	for _, name := range []string{"deleted.go", "old.go", "tracked.go"} {
+		write(name, "package fixture\n")
+	}
+	git("add", ".")
+	if err := os.Remove(filepath.Join(dir, "deleted.go")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(dir, "old.go"), filepath.Join(dir, "renamed.go")); err != nil {
+		t.Fatal(err)
+	}
+	write("new.go", "package fixture\n")
+	write("ignored.go", "package fixture\n")
+	write(".gitignore", "ignored.go\n")
+	write("inventory.mk", "test-inventory:\n\t@printf '%s\\n' $(GOFILES)\n")
+	// #nosec G204 -- Fixed recipe and fixture makefile; no user-selected commands.
+	cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", "-s", "-f", filepath.Join(root, "Makefile"), "-f", "inventory.mk", "test-inventory")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("inventory: %v\n%s", err, out)
+	}
+	got := strings.Fields(string(out))
+	slices.Sort(got)
+	want := []string{"new.go", "renamed.go", "tracked.go"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Go file inventory %q, want %q", got, want)
+	}
+}
 
 // The quality commands must propagate a tool failure, even with empty stdout.
 // Running them with stub tools tests the shell recipes rather than Go's runner.

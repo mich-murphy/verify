@@ -13,7 +13,7 @@ import (
 )
 
 // Suppression patterns are built by concatenation so this file does not trip
-// Gate's own suppressions guard.
+// Verify's own suppressions guard.
 var (
 	nolint = "//" + "nolint"
 	skip   = "t.Sk" + "ip(\"x\")"

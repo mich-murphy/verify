@@ -1,6 +1,6 @@
 # Status
 
-Gate v1 is implemented for cooperative local use on macOS and Linux, with GitHub shipping.
+Verify v1 is implemented for cooperative local use on macOS and Linux, with GitHub shipping.
 The public repository is a clean MIT-licensed snapshot, not an import of development archives
 or other applications' source.
 
@@ -26,13 +26,28 @@ results. Ground truth is withheld from reviewer packets. These public examples h
 been live-model evaluated; they are not an accuracy benchmark. See
 [reviewer evaluation](docs/reviewer-evaluation.md).
 
-The installed-Pi harness exercises real Gate subprocesses, including failure feedback,
+The installed-Pi harness exercises real Verify subprocesses, including failure feedback,
 bounded follow-ups and reset. Earlier isolated model-session testing covered repair and
 settlement; neither is a claim about the interactive TUI or permanent user installation.
 
 The [CI workflow](https://github.com/mich-murphy/verify/actions/workflows/ci.yml) runs the full
 quality gate on Linux and macOS, with prek installed for integration tests. Consult its actual
 run result rather than treating local evidence as remote CI approval.
+
+## Verify rename
+
+The executable is now `verify`, with `verify.yaml`, `VERIFY_*` environment variables,
+`verify.*` JSON schemas, `<git-common-dir>/verify/` state and `verify/verified` GitHub status.
+The module and repository URL were already named `verify`. This is a breaking rename;
+[upgrade instructions](README.md#upgrading-from-gate) cover config, agent activation,
+state and branch protection. Old Gate state is retained, not migrated.
+
+Rename validation passed `make check`, `make fmt-check`, `make build`, uncached race tests
+across all 18 packages, and the installed-Pi harness (one test, no skips). Built-CLI smoke
+checks passed root help, all nine JSON command-help responses, structured usage errors and
+agent-hook blocking. Coverage remains **85.5%**, with unchanged 80/70 floors. Remote CI and
+live-model behavior have not been rerun for this uncommitted rename; no global install or
+integration activation was performed.
 
 ## Linux marker regression
 
@@ -45,7 +60,7 @@ and the corrected code passed all 32 under the same conditions. No test or thres
 
 ## Deliberate limits
 
-Gate is not a hostile-code sandbox, an autonomous repair agent or a CI/merge/deploy service.
+Verify is not a hostile-code sandbox, an autonomous repair agent or a CI/merge/deploy service.
 The intent-based revert test and Sign-off mutation testing remain deferred. A small synthetic
 review corpus does not establish general reviewer accuracy. Users configure branch protection
-and install/activate integrations explicitly; Gate does not do those automatically.
+and install/activate integrations explicitly; Verify does not do those automatically.

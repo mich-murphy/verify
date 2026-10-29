@@ -1,6 +1,6 @@
-# Optional gate.yaml: only facts about the repository that Gate cannot derive.
+# Optional verify.yaml: only facts about the repository that Verify cannot derive.
 # Every key is optional; unknown keys are errors. Commit it on the base branch;
-# Gate reads it from the merge-base so a branch cannot weaken its own checks.
+# Verify reads it from the merge-base so a branch cannot weaken its own checks.
 base: main                    # only when origin/HEAD is not the target branch
 prepare:                      # only when the lockfile does not describe the install
   - name: deps
@@ -9,10 +9,10 @@ prepare:                      # only when the lockfile does not describe the ins
 signoff_paths: ["internal/state/**"]
 verify:
   surfaces: ["cmd/**"]
-  setup: [go, build, -o, .gate-bin/gate, ./cmd/gate]
+  setup: [go, build, -o, .verify-bin/verify, ./cmd/verify]
   scenarios:
     - name: help
-      run: [.gate-bin/gate, --help]
+      run: [.verify-bin/verify, --help]
       exit: 0
       stdout_contains: "usage"
 waivers:

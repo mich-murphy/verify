@@ -27,7 +27,7 @@ const (
 )
 
 // ResultSchema identifies the --json output.
-const ResultSchema = "gate.result/1"
+const ResultSchema = "verify.result/1"
 
 // Result is the single object printed by --json.
 type Result struct {
@@ -61,7 +61,7 @@ var commands = map[string]Command{}
 
 func register(name string, c Command) { commands[name] = c }
 
-const usageText = `usage: gate <command> [flags]
+const usageText = `usage: verify <command> [flags]
 
 commands:
   check [--sha REF] [--fast]   run guards, setup audit and repository checks
@@ -80,7 +80,7 @@ every command accepts --json.
 // Run dispatches args and returns the process exit code.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Detect JSON before flag parsing: flag.Parse stops at the first unknown flag.
-	// In particular, `gate check --bad --json` must still emit one JSON result.
+	// In particular, `verify check --bad --json` must still emit one JSON result.
 	jsonMode := false
 	for _, arg := range args {
 		if arg == "--" {
@@ -92,7 +92,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	env := &Env{Args: args, Stdin: stdin, Stdout: stdout, Stderr: stderr, JSON: jsonMode}
 	if len(args) == 0 || args[0] == "--json" && len(args) == 1 {
-		return env.Fail("gate", ExitUsage, usageText, "choose a command from gate --help")
+		return env.Fail("verify", ExitUsage, usageText, "choose a command from verify --help")
 	}
 	if args[0] == "--json" {
 		args = args[1:]
@@ -107,12 +107,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	cmd, ok := commands[args[0]]
 	if !ok {
-		return env.Fail(args[0], ExitUsage, fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText), "choose a command from gate --help")
+		return env.Fail(args[0], ExitUsage, fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText), "choose a command from verify --help")
 	}
 	env.Args = args[1:]
 	dir, err := os.Getwd()
 	if err != nil {
-		return env.Fail(args[0], ExitBlocked, err.Error(), "run gate from an accessible directory")
+		return env.Fail(args[0], ExitBlocked, err.Error(), "run verify from an accessible directory")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -122,14 +122,14 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // Flags returns a FlagSet with the shared --json flag bound to env.JSON.
 func (e *Env) Flags(name string) *flag.FlagSet {
-	fs := flag.NewFlagSet("gate "+name, flag.ContinueOnError)
+	fs := flag.NewFlagSet("verify "+name, flag.ContinueOnError)
 	var diagnostics bytes.Buffer
 	if e.JSON {
 		fs.SetOutput(&diagnostics) // JSON mode has exactly one result, including on parse errors.
 	} else {
 		fs.SetOutput(io.MultiWriter(e.Stderr, &diagnostics))
 	}
-	fs.BoolVar(&e.JSON, "json", e.JSON, "print one gate.result/1 JSON object")
+	fs.BoolVar(&e.JSON, "json", e.JSON, "print one verify.result/1 JSON object")
 	fs.Usage = func() {
 		// The flag package also calls Usage after a parse error. Only ErrHelp
 		// calls it without first writing a diagnostic to FlagSet.Output().
@@ -138,9 +138,9 @@ func (e *Env) Flags(name string) *flag.FlagSet {
 		}
 		var text bytes.Buffer
 		if name == "decide" {
-			_, _ = fmt.Fprintln(&text, "usage: gate decide approve|accept ID|waive OBLIGATION [flags]")
+			_, _ = fmt.Fprintln(&text, "usage: verify decide approve|accept ID|waive OBLIGATION [flags]")
 		} else {
-			_, _ = fmt.Fprintf(&text, "usage: gate %s [flags]\n", name)
+			_, _ = fmt.Fprintf(&text, "usage: verify %s [flags]\n", name)
 		}
 		original := fs.Output()
 		fs.SetOutput(&text)
@@ -191,7 +191,7 @@ func (e *Env) Fail(command string, code int, msg, next string) int {
 }
 
 func renderText(w io.Writer, r Result) {
-	head := "gate " + r.Command + ": " + r.Status
+	head := "verify " + r.Command + ": " + r.Status
 	if r.Lane != "" {
 		head += " [" + r.Lane + " lane]"
 	}

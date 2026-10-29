@@ -24,7 +24,7 @@ type Command struct {
 	Timeout time.Duration
 }
 
-const ForegroundOwnerEnv = "GATE_FOREGROUND_OWNER"
+const ForegroundOwnerEnv = "VERIFY_FOREGROUND_OWNER"
 
 type Status string
 

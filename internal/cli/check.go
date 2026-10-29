@@ -16,18 +16,18 @@ func runCheck(env *Env) int {
 	sha := fs.String("sha", "", "commit to check (default HEAD)")
 	fast := fs.Bool("fast", false, "guards and pre-commit in place; no record")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("check", ExitUsage, "usage: gate check [--sha REF] [--fast] [--json]", "fix the arguments")
+		return env.Fail("check", ExitUsage, "usage: verify check [--sha REF] [--fast] [--json]", "fix the arguments")
 	}
 	repo, err := gitx.Open(env.Ctx, env.Dir)
 	if err != nil {
-		return env.Fail("check", ExitBlocked, "not a git repository: "+err.Error(), "run gate inside a git work tree")
+		return env.Fail("check", ExitBlocked, "not a git repository: "+err.Error(), "run verify inside a git work tree")
 	}
 	out, err := check.Run(env.Ctx, repo, check.Options{Ref: *sha, Fast: *fast})
 	if err != nil {
 		if errors.Is(err, config.ErrInvalid) {
-			return env.Fail("check", ExitUsage, err.Error(), "fix gate.yaml")
+			return env.Fail("check", ExitUsage, err.Error(), "fix verify.yaml")
 		}
-		return env.Fail("check", ExitBlocked, err.Error(), "resolve the error and run gate check again")
+		return env.Fail("check", ExitBlocked, err.Error(), "resolve the error and run verify check again")
 	}
 	rec := out.Record
 	res := Result{
@@ -53,7 +53,7 @@ func runCheck(env *Env) int {
 	}
 	res.Message = strings.Join(msg, "\n")
 	if rec.Status == "fail" {
-		res.NextAction = "fix the blocking findings, commit, and run gate check again"
+		res.NextAction = "fix the blocking findings, commit, and run verify check again"
 		return env.Emit(res, ExitFindings)
 	}
 	return env.Emit(res, ExitOK)

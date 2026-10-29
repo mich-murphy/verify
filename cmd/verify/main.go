@@ -1,4 +1,4 @@
-// Command gate is the Gate CLI entry point.
+// Command verify is the Verify CLI entry point.
 package main
 
 import (

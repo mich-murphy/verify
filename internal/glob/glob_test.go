@@ -7,7 +7,7 @@ func TestMatch(t *testing.T) {
 		pattern, name string
 		want          bool
 	}{
-		{"cmd/**", "cmd/gate/main.go", true},
+		{"cmd/**", "cmd/verify/main.go", true},
 		{"cmd/**", "cmd", true},
 		{"cmd/**", "internal/cmd/x.go", false},
 		{"**/*.md", "a/b/c.md", true},

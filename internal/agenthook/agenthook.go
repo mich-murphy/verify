@@ -1,5 +1,5 @@
 // Package agenthook screens agent tool calls for hook bypasses and edits to
-// hook or Gate configuration (SPEC §9). It is noise reduction, not
+// hook or Verify configuration (SPEC §9). It is noise reduction, not
 // enforcement: anything it cannot parse is allowed.
 package agenthook
 
@@ -65,14 +65,14 @@ func Evaluate(r io.Reader) Verdict {
 }
 
 var protectedFiles = map[string]bool{
-	"gate.yaml": true, ".pre-commit-config.yaml": true, "prek.toml": true, "lefthook.yml": true,
+	"verify.yaml": true, ".pre-commit-config.yaml": true, "prek.toml": true, "lefthook.yml": true,
 }
 
-// CheckPath returns a block reason when editing p would change hook or Gate config.
+// CheckPath returns a block reason when editing p would change hook or Verify config.
 func CheckPath(p string) string {
 	parts := strings.Split(path.Clean(filepath.ToSlash(p)), "/")
 	if protectedFiles[parts[len(parts)-1]] {
-		return "editing " + parts[len(parts)-1] + " changes hook or Gate config; ask the user to change it"
+		return "editing " + parts[len(parts)-1] + " changes hook or Verify config; ask the user to change it"
 	}
 	for i, part := range parts {
 		if part == ".husky" || part == ".git" && i+1 < len(parts) && (parts[i+1] == "hooks" || parts[i+1] == "config") {

@@ -30,14 +30,14 @@ type reviewPlan struct {
 func runReview(env *Env) int {
 	fs := env.Flags("review")
 	intentFile := fs.String("intent", "", "file with the change's intent")
-	choice := fs.String("reviewer", "", "auto, claude or codex (default: $GATE_REVIEWER, else auto)")
+	choice := fs.String("reviewer", "", "auto, claude or codex (default: $VERIFY_REVIEWER, else auto)")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("review", ExitUsage, "usage: gate review [--intent FILE] [--reviewer auto|claude|codex] [--json]", "fix the arguments")
+		return env.Fail("review", ExitUsage, "usage: verify review [--intent FILE] [--reviewer auto|claude|codex] [--json]", "fix the arguments")
 	}
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
 	repo, err := gitx.Open(env.Ctx, env.Dir)
 	if err != nil {
-		return blocked("not a git repository: "+err.Error(), "run gate inside a git work tree")
+		return blocked("not a git repository: "+err.Error(), "run verify inside a git work tree")
 	}
 	sha, err := repo.Head(env.Ctx)
 	if err != nil {
@@ -46,17 +46,17 @@ func runReview(env *Env) int {
 	loaded, err := config.Load(env.Ctx, repo, sha)
 	if err != nil {
 		if errors.Is(err, config.ErrInvalid) {
-			return env.Fail("review", ExitUsage, err.Error(), "fix gate.yaml")
+			return env.Fail("review", ExitUsage, err.Error(), "fix verify.yaml")
 		}
 		return blocked(err.Error(), "make sure the base branch exists")
 	}
 	cfg := loaded.Config
 	if *choice == "" {
-		*choice = cmp.Or(os.Getenv("GATE_REVIEWER"), "auto")
+		*choice = cmp.Or(os.Getenv("VERIFY_REVIEWER"), "auto")
 	}
-	rv, err := review.Select(*choice, os.Getenv("GATE_AUTHOR"), cmp.Or(os.Getenv("GATE_CLAUDE_MODEL"), "opus"), os.Getenv("GATE_CODEX_MODEL"))
+	rv, err := review.Select(*choice, os.Getenv("VERIFY_AUTHOR"), cmp.Or(os.Getenv("VERIFY_CLAUDE_MODEL"), "opus"), os.Getenv("VERIFY_CODEX_MODEL"))
 	if err != nil {
-		return env.Fail("review", ExitUsage, err.Error(), "set GATE_REVIEWER or --reviewer to auto, claude or codex")
+		return env.Fail("review", ExitUsage, err.Error(), "set VERIFY_REVIEWER or --reviewer to auto, claude or codex")
 	}
 	changes, err := repo.Changes(env.Ctx, loaded.MergeBase, sha)
 	if err != nil {
@@ -77,13 +77,13 @@ func runReview(env *Env) int {
 		return blocked(err.Error(), "resolve the state lock error")
 	}
 	defer unlock()
-	br, msg, next := reviewGate(st, name, sha, loaded.MergeBase, l.Lane)
+	br, msg, next := reviewAdmission(st, name, sha, loaded.MergeBase, l.Lane)
 	if msg != "" {
 		return blocked(msg, next)
 	}
 	previous, err := st.LoadReview(sha)
 	if err != nil && !errors.Is(err, state.ErrNotFound) {
-		return blocked(err.Error(), "delete the corrupt review record and retry gate review")
+		return blocked(err.Error(), "delete the corrupt review record and retry verify review")
 	}
 	if err == nil && previous.MergeBase == loaded.MergeBase && previous.Branch == name {
 		return reuseReview(env, previous, br, l.Lane)
@@ -125,9 +125,9 @@ func finishReview(env *Env, st *state.Store, rv review.Reviewer, plan reviewPlan
 				err = errors.Join(err, uerr)
 			}
 		}
-		next := "retry gate review"
+		next := "retry verify review"
 		if errors.Is(err, review.ErrUnavailable) {
-			next = "fix reviewer CLI access (gate doctor), or use --reviewer"
+			next = "fix reviewer CLI access (verify doctor), or use --reviewer"
 		}
 		return blocked(err.Error(), next)
 	}
@@ -153,28 +153,28 @@ func finishReview(env *Env, st *state.Store, rv review.Reviewer, plan reviewPlan
 		Message: fmt.Sprintf("reviewer %s: %d new finding(s), %d resolved", rv.Name(), len(resp.Findings), len(resp.Resolved)),
 	}
 	if code != ExitOK {
-		res.NextAction = "fix the blocking review findings, commit, and run gate check"
+		res.NextAction = "fix the blocking review findings, commit, and run verify check"
 	} else {
-		res.NextAction = "run gate verify if a surface changed, then gate ship"
+		res.NextAction = "run verify verify if a surface changed, then verify ship"
 	}
 	return env.Emit(res, code)
 }
 
-// reviewGate checks fresh, decision-aware check admission before reuse or a new review.
-func reviewGate(st *state.Store, name, sha, mergeBase, laneName string) (br *state.Branch, msg, next string) {
+// reviewAdmission checks fresh, decision-aware check admission before reuse or a new review.
+func reviewAdmission(st *state.Store, name, sha, mergeBase, laneName string) (br *state.Branch, msg, next string) {
 	chk, err := st.LoadCheck(sha)
 	if err != nil && !errors.Is(err, state.ErrNotFound) {
-		return nil, err.Error(), "delete the corrupt record under " + st.Dir + " and run gate check"
+		return nil, err.Error(), "delete the corrupt record under " + st.Dir + " and run verify check"
 	}
 	if chk == nil || chk.MergeBase != mergeBase || chk.Lane != laneName {
-		return nil, "no fresh check record for " + sha[:12], "gate check"
+		return nil, "no fresh check record for " + sha[:12], "verify check"
 	}
 	br, err = st.LoadBranch(name)
 	if err != nil {
 		return nil, err.Error(), "delete the corrupt record under " + st.Dir
 	}
 	if !eligible.AssessCheck(chk, br.Decisions, sha).Passing {
-		return nil, "check has uncovered findings or failed execution", "gate check or gate decide accept/waive the check finding"
+		return nil, "check has uncovered findings or failed execution", "verify check or verify decide accept/waive the check finding"
 	}
 	return br, "", ""
 }
@@ -182,13 +182,13 @@ func reviewGate(st *state.Store, name, sha, mergeBase, laneName string) (br *sta
 // reviewBudget is checked only after an exact-SHA/base/branch review is ruled out.
 func reviewBudget(st *state.Store, name string, br *state.Branch) (msg, next string) {
 	if br.Parked {
-		return "branch is parked", "gate decide accept the open findings, then gate decide approve"
+		return "branch is parked", "verify decide accept the open findings, then verify decide approve"
 	}
 	if br.ReviewCalls >= config.ReviewCalls {
 		if err := st.UpdateBranch(name, func(b *state.Branch) error { b.Parked = true; return nil }); err != nil {
 			return err.Error(), "resolve the state error"
 		}
-		return fmt.Sprintf("review budget exhausted (%d/%d calls); branch parked", br.ReviewCalls, config.ReviewCalls), "gate decide"
+		return fmt.Sprintf("review budget exhausted (%d/%d calls); branch parked", br.ReviewCalls, config.ReviewCalls), "verify decide"
 	}
 	return "", ""
 }
@@ -213,13 +213,13 @@ func reuseReview(env *Env, rec *state.ReviewRecord, br *state.Branch, laneName s
 	}
 	message := "reusing review recorded for this exact SHA, comparison base and branch"
 	if rec.Status == state.StatusFail && !blocking {
-		message += "; stored raw review failed, but decisions cover its blocking claims (see gate status for effective eligibility)"
+		message += "; stored raw review failed, but decisions cover its blocking claims (see verify status for effective eligibility)"
 	}
 	res := Result{Command: "review", SHA: rec.SHA, Lane: laneName, Status: status, Findings: findings, Message: message}
 	if code == ExitFindings {
-		res.NextAction = "run gate status to inspect effective findings and decisions"
+		res.NextAction = "run verify status to inspect effective findings and decisions"
 	} else {
-		res.NextAction = "run gate verify if a surface changed, then gate ship"
+		res.NextAction = "run verify verify if a surface changed, then verify ship"
 	}
 	return env.Emit(res, code)
 }

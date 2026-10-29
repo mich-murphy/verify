@@ -20,7 +20,7 @@ func runSetup(env *Env) int {
 	fs := env.Flags("setup")
 	apply := fs.Bool("apply", false, "write missing prek hooks and install the Git hooks")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("setup", ExitUsage, "usage: gate setup [--apply] [--json]", "fix the arguments")
+		return env.Fail("setup", ExitUsage, "usage: verify setup [--apply] [--json]", "fix the arguments")
 	}
 	root := env.Dir
 	if repo, err := gitx.Open(env.Ctx, env.Dir); err == nil {
@@ -32,17 +32,17 @@ func runSetup(env *Env) int {
 		if errors.Is(err, config.ErrInvalid) {
 			code = ExitUsage
 		}
-		return env.Fail("setup", code, err.Error(), "fix gate.yaml")
+		return env.Fail("setup", code, err.Error(), "fix verify.yaml")
 	}
 	rep, err := audit.Run(env.Ctx, root, cfg)
 	if err != nil {
-		return env.Fail("setup", ExitBlocked, "setup audit: "+err.Error(), "fix the unreadable file and rerun gate setup")
+		return env.Fail("setup", ExitBlocked, "setup audit: "+err.Error(), "fix the unreadable file and rerun verify setup")
 	}
 	var applied []string
 	if *apply {
 		res, aerr := onboard.Apply(env.Ctx, root, rep)
 		if aerr != nil {
-			return env.Fail("setup", ExitBlocked, "setup --apply: "+aerr.Error(), "fix the error and rerun gate setup --apply")
+			return env.Fail("setup", ExitBlocked, "setup --apply: "+aerr.Error(), "fix the error and rerun verify setup --apply")
 		}
 		if applied = appliedLines(res); len(applied) == 0 && rep.Profile != "unsupported" {
 			applied = []string{"nothing to write"}
@@ -51,7 +51,7 @@ func runSetup(env *Env) int {
 			rep, err = audit.Run(env.Ctx, root, cfg)
 		}
 		if err != nil {
-			return env.Fail("setup", ExitBlocked, "setup audit after apply: "+err.Error(), "fix the file and rerun gate setup")
+			return env.Fail("setup", ExitBlocked, "setup audit after apply: "+err.Error(), "fix the file and rerun verify setup")
 		}
 	}
 	msg := strings.Join(append(applied, "profile: "+rep.Profile, renderAudit(rep)), "\n")

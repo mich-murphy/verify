@@ -1,5 +1,5 @@
 // Package ship pushes the checked commit, opens or updates the PR and sets the
-// gate/verified status (SPEC §7). Eligibility is decided by the caller.
+// verify/verified status (SPEC §7). Eligibility is decided by the caller.
 package ship
 
 import (
@@ -68,7 +68,7 @@ func actions(o Options) []action {
 	return []action{
 		{"push", fmt.Sprintf("git push --force-with-lease=%s:<remote value> %s %s:%s", ref, o.Remote, o.SHA, ref), pushStep},
 		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create or gh pr edit (base %s)", o.Branch, o.Target, o.Base), prStep},
-		{"status", fmt.Sprintf("gh api --hostname github.com -X POST repos/%s/statuses/%s -f state=success -f context=gate/verified", o.Target, o.SHA), statusStep},
+		{"status", fmt.Sprintf("gh api --hostname github.com -X POST repos/%s/statuses/%s -f state=success -f context=verify/verified", o.Target, o.SHA), statusStep},
 	}
 }
 
@@ -124,7 +124,7 @@ type prInfo struct {
 }
 
 func prStep(ctx context.Context, o Options, rep *Report) (string, error) {
-	dir, err := os.MkdirTemp("", "gate-pr-")
+	dir, err := os.MkdirTemp("", "verify-pr-")
 	if err != nil {
 		return "", err
 	}
@@ -156,19 +156,19 @@ func prStep(ctx context.Context, o Options, rep *Report) (string, error) {
 }
 
 func statusStep(ctx context.Context, o Options, _ *Report) (string, error) {
-	desc := "Gate checked this exact commit (" + o.Lane + " lane)"
+	desc := "Verify checked this exact commit (" + o.Lane + " lane)"
 	_, err := gh(ctx, o, "api", "--hostname", "github.com", "-X", "POST", "repos/"+o.Target+"/statuses/"+o.SHA,
-		"-f", "state=success", "-f", "context=gate/verified", "-f", "description="+desc)
+		"-f", "state=success", "-f", "context=verify/verified", "-f", "description="+desc)
 	if err != nil {
 		return "", err
 	}
-	return "set gate/verified=success on " + short(o.SHA), nil
+	return "set verify/verified=success on " + short(o.SHA), nil
 }
 
 func gh(ctx context.Context, o Options, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- fixed executable; arguments are built by Gate.
+	cmd := exec.CommandContext(ctx, "gh", args...) // #nosec G204 -- fixed executable; arguments are built by Verify.
 	cmd.Dir = o.Repo.Root
 	cmd.Env = append(os.Environ(), "GH_HOST=github.com", "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1")
 	var out, stderr bytes.Buffer

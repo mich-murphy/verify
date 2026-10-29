@@ -132,7 +132,7 @@ func TestFullBranchMergeBaseAndShowFile(t *testing.T) {
 }
 
 func FuzzRepositoryPath(f *testing.F) {
-	for _, seed := range []string{"gate.yaml", "../escape", "a/b", "/absolute", "a/../b", "a\x00b"} {
+	for _, seed := range []string{"verify.yaml", "../escape", "a/b", "/absolute", "a/../b", "a\x00b"} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, path string) {

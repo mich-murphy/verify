@@ -9,7 +9,7 @@ import (
 
 func TestRunHelp(t *testing.T) {
 	var out, errb bytes.Buffer
-	if code := run([]string{"--help"}, strings.NewReader(""), &out, &errb); code != 0 || !strings.Contains(out.String(), "usage") {
+	if code := run([]string{"--help"}, strings.NewReader(""), &out, &errb); code != 0 || !strings.Contains(out.String(), "usage: verify <command>") {
 		t.Fatalf("code=%d out=%q", code, out.String())
 	}
 }
@@ -19,7 +19,7 @@ func TestMainExits(t *testing.T) {
 	exit = func(c int) { got = c }
 	defer func() { exit = os.Exit }()
 	old := os.Args
-	os.Args = []string{"gate", "--help"}
+	os.Args = []string{"verify", "--help"}
 	defer func() { os.Args = old }()
 	main()
 	if got != 0 {

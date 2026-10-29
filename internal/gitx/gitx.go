@@ -52,7 +52,7 @@ func (r *Repo) run(ctx context.Context, args ...string) ([]byte, error) {
 	return r.runIn(ctx, r.Root, args...)
 }
 
-// runIn is run targeting dir (for example a Gate-owned worktree) instead of the repository root.
+// runIn is run targeting dir (for example a Verify-owned worktree) instead of the repository root.
 func (r *Repo) runIn(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	fixed := []string{"--no-pager", "--no-optional-locks", "--no-replace-objects", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.attributesFile=/dev/null", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "-c", "core.symlinks=true", "-c", "diff.external=", "-c", "protocol.allow=never", "-c", "credential.helper=", "-c", "core.askPass=", "-C", dir}
 	// #nosec G204 -- Fixed Git executable and hardened argv boundary; revisions and paths cannot become options.

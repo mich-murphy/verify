@@ -39,18 +39,18 @@ func newShipEnv(t *testing.T) *shipEnv {
 	gitRun(t, origin, "init", "-q", "--bare", "-b", "main")
 	gitRun(t, repo, "remote", "add", "origin", "git@github.com:example/project.git")
 	ssh := filepath.Join(bin, "ssh")
-	write(t, bin, "ssh", "#!/bin/sh\ncase \"$*\" in *git-upload-pack*) exec git-upload-pack \"$GATE_BARE\";; *git-receive-pack*) exec git-receive-pack \"$GATE_BARE\";; esac\nexit 1\n")
+	write(t, bin, "ssh", "#!/bin/sh\ncase \"$*\" in *git-upload-pack*) exec git-upload-pack \"$VERIFY_BARE\";; *git-receive-pack*) exec git-receive-pack \"$VERIFY_BARE\";; esac\nexit 1\n")
 	if err := os.Chmod(ssh, 0o700); err != nil { // #nosec G302,G703 -- fake executable in test temp directory
 		t.Fatal(err)
 	}
-	t.Setenv("GATE_BARE", origin)
-	r, _ := gate(t, "status")
+	t.Setenv("VERIFY_BARE", origin)
+	r, _ := runCLI(t, "status")
 	return &shipEnv{repo: repo, origin: origin, sha: r.SHA, ghLog: logf, st: state.Open(filepath.Join(repo, ".git"))}
 }
 
 func (e *shipEnv) signoff(t *testing.T) {
 	t.Helper()
-	commit(t, e.repo, "gate.yaml", baseYAML+"signoff_paths: [\"a.go\"]\n")
+	commit(t, e.repo, "verify.yaml", baseYAML+"signoff_paths: [\"a.go\"]\n")
 	e.sha = strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "HEAD"))
 }
 
@@ -75,25 +75,25 @@ func (e *shipEnv) ghCalls() string {
 
 func TestShipRefusals(t *testing.T) {
 	e := newShipEnv(t)
-	r, code := gate(t, "ship")
-	if code != ExitBlocked || r.NextAction != "run gate check" {
+	r, code := runCLI(t, "ship")
+	if code != ExitBlocked || r.NextAction != "run verify check" {
 		t.Fatalf("no check: %d %+v", code, r)
 	}
 	e.records(t, "standard", false)
-	if r, code = gate(t, "ship"); code != ExitBlocked || r.NextAction != "run gate review" {
+	if r, code = runCLI(t, "ship"); code != ExitBlocked || r.NextAction != "run verify review" {
 		t.Fatalf("no review: %d %+v", code, r)
 	}
 	e.signoff(t)
 	e.records(t, "signoff", true)
-	if r, code = gate(t, "ship"); code != ExitBlocked || !strings.Contains(r.NextAction, "decide approve") {
+	if r, code = runCLI(t, "ship"); code != ExitBlocked || !strings.Contains(r.NextAction, "decide approve") {
 		t.Fatalf("no approval: %d %+v", code, r)
 	}
 	e.records(t, "signoff", true)
-	if _, code := gate(t, "decide", "approve", "--reason", "fixture"); code != 0 {
+	if _, code := runCLI(t, "decide", "approve", "--reason", "fixture"); code != 0 {
 		t.Fatalf("approve: %d", code)
 	}
 	write(t, e.repo, "dirty.txt", "x")
-	if r, code = gate(t, "ship"); code != ExitBlocked || !strings.Contains(r.Message, "not clean") {
+	if r, code = runCLI(t, "ship"); code != ExitBlocked || !strings.Contains(r.Message, "not clean") {
 		t.Fatalf("dirty: %d %+v", code, r)
 	}
 	if e.ghCalls() != "" {
@@ -105,7 +105,7 @@ func TestShipStaleSHA(t *testing.T) {
 	e := newShipEnv(t)
 	e.records(t, "standard", true)
 	commit(t, e.repo, "b.go", "package a\n\nvar Y = 1\n")
-	if r, code := gate(t, "ship"); code != ExitBlocked || r.NextAction != "run gate check" {
+	if r, code := runCLI(t, "ship"); code != ExitBlocked || r.NextAction != "run verify check" {
 		t.Fatalf("stale: %d %+v", code, r)
 	}
 }
@@ -113,16 +113,16 @@ func TestShipStaleSHA(t *testing.T) {
 func TestShipSuccessAndDryRun(t *testing.T) {
 	e := newShipEnv(t)
 	e.records(t, "standard", true)
-	r, code := gate(t, "ship", "--dry-run")
+	r, code := runCLI(t, "ship", "--dry-run")
 	if code != 0 || r.Status != "dry-run" || len(r.Steps) != 3 || e.ghCalls() != "" {
 		t.Fatalf("dry: %d %+v", code, r)
 	}
-	r, code = gate(t, "ship")
+	r, code = runCLI(t, "ship")
 	if code != 0 || r.Status != "shipped" {
 		t.Fatalf("ship: %d %+v", code, r)
 	}
 	calls := e.ghCalls()
-	for _, want := range []string{"pr edit 7 --repo github.com/example/project --body-file", "statuses/" + e.sha, "context=gate/verified"} {
+	for _, want := range []string{"pr edit 7 --repo github.com/example/project --body-file", "statuses/" + e.sha, "context=verify/verified"} {
 		if !strings.Contains(calls, want) {
 			t.Errorf("gh calls lack %q:\n%s", want, calls)
 		}
@@ -139,7 +139,7 @@ func TestShipUsageAndFailure(t *testing.T) {
 	if code := Run([]string{"ship", "extra"}, nil, &sink, &sink); code != ExitUsage {
 		t.Fatalf("code %d", code)
 	}
-	r, code := gate(t, "ship", "--remote", "nowhere")
+	r, code := runCLI(t, "ship", "--remote", "nowhere")
 	if code != ExitBlocked || !strings.Contains(r.Message, "remaining") || r.NextAction == "" {
 		t.Fatalf("%d %+v", code, r)
 	}
@@ -149,13 +149,13 @@ func TestDecideAndStatus(t *testing.T) {
 	e := newShipEnv(t)
 	e.signoff(t)
 	e.records(t, "signoff", true)
-	if _, code := gate(t, "decide", "approve"); code != ExitUsage {
+	if _, code := runCLI(t, "decide", "approve"); code != ExitUsage {
 		t.Fatalf("reason required: %d", code)
 	}
-	if _, code := gate(t, "decide", "accept", "F9", "--reason", "x"); code != ExitUsage {
+	if _, code := runCLI(t, "decide", "accept", "F9", "--reason", "x"); code != ExitUsage {
 		t.Fatalf("unknown id: %d", code)
 	}
-	if _, code := gate(t, "decide", "bogus", "--reason", "x"); code != ExitUsage {
+	if _, code := runCLI(t, "decide", "bogus", "--reason", "x"); code != ExitUsage {
 		t.Fatalf("bad kind: %d", code)
 	}
 	if err := e.st.UpdateBranch("feature", func(b *state.Branch) error {
@@ -164,18 +164,18 @@ func TestDecideAndStatus(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	s, _ := gate(t, "status")
+	s, _ := runCLI(t, "status")
 	if !strings.Contains(s.Message, "eligible: no") || !strings.Contains(s.Message, "blocking: F1") {
 		t.Fatalf("%+v", s)
 	}
-	if _, code := gate(t, "decide", "accept", "F1", "--reason", "fine"); code != 0 {
+	if _, code := runCLI(t, "decide", "accept", "F1", "--reason", "fine"); code != 0 {
 		t.Fatalf("accept: %d", code)
 	}
-	if _, code := gate(t, "decide", "--reason", "ok", "approve"); code != 0 {
+	if _, code := runCLI(t, "decide", "--reason", "ok", "approve"); code != 0 {
 		t.Fatalf("approve: %d", code)
 	}
-	s, _ = gate(t, "status")
-	if !strings.Contains(s.Message, "eligible: yes") || !strings.Contains(s.Message, "decision: approve") || s.NextAction != "run gate ship" {
+	s, _ = runCLI(t, "status")
+	if !strings.Contains(s.Message, "eligible: yes") || !strings.Contains(s.Message, "decision: approve") || s.NextAction != "run verify ship" {
 		t.Fatalf("%+v", s)
 	}
 	b, _ := e.st.LoadBranch("feature")
@@ -194,7 +194,7 @@ func TestDecideRejectsMismatchedLaneCheck(t *testing.T) {
 	if err := e.st.SaveCheck(check); err != nil {
 		t.Fatal(err)
 	}
-	if r, code := gate(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitBlocked || r.NextAction != "run gate check" || r.Message != "no check record for HEAD" {
+	if r, code := runCLI(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitBlocked || r.NextAction != "run verify check" || r.Message != "no check record for HEAD" {
 		t.Fatalf("stale docs-lane check must not authorize a waiver: code %d: %+v", code, r)
 	}
 	branch, err := e.st.LoadBranch("feature")
@@ -205,7 +205,7 @@ func TestDecideRejectsMismatchedLaneCheck(t *testing.T) {
 	if err := e.st.SaveCheck(check); err != nil {
 		t.Fatal(err)
 	}
-	if r, code := gate(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitOK {
+	if r, code := runCLI(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitOK {
 		t.Fatalf("fresh standard-lane check must permit the waiver: code %d: %+v", code, r)
 	}
 }
@@ -224,26 +224,26 @@ func TestDecideWaive(t *testing.T) {
 	for _, args := range [][]string{
 		{"waive", "nope"}, {"accept", "check:t"}, {"accept", "setup:x"},
 	} {
-		if r, code := gate(t, append([]string{"decide"}, append(args, "--reason", "r")...)...); code != ExitUsage {
+		if r, code := runCLI(t, append([]string{"decide"}, append(args, "--reason", "r")...)...); code != ExitUsage {
 			t.Errorf("%v: code %d: %+v", args, code, r)
 		}
 	}
-	if r, code := gate(t, "decide", "waive", "verify", "--reason", "r"); code != ExitUsage {
+	if r, code := runCLI(t, "decide", "waive", "verify", "--reason", "r"); code != ExitUsage {
 		t.Fatalf("missing verify must not be waived: %d %+v", code, r)
 	}
 	for _, args := range [][]string{{"waive", "x"}, {"accept", "guard:g"}} {
-		if r, code := gate(t, append([]string{"decide"}, append(args, "--reason", "r")...)...); code != ExitOK {
+		if r, code := runCLI(t, append([]string{"decide"}, append(args, "--reason", "r")...)...); code != ExitOK {
 			t.Errorf("%v: code %d: %+v", args, code, r)
 		}
 	}
-	if s, _ := gate(t, "status"); !strings.Contains(s.Message, "decision: waive setup:x") {
+	if s, _ := runCLI(t, "status"); !strings.Contains(s.Message, "decision: waive setup:x") {
 		t.Fatalf("%+v", s)
 	}
 	noGo := &state.VerifyRecord{SHA: e.sha, MergeBase: base, Verdict: "no-go", Finished: time.Now().UTC(), Findings: []state.Finding{{ID: "verify:x", Source: state.SourceVerify, Severity: state.SeverityBlock, State: state.StateOpen, Message: "assertion failed"}}}
 	if err := e.st.SaveVerify(noGo); err != nil {
 		t.Fatal(err)
 	}
-	if r, code := gate(t, "decide", "waive", "verify", "--reason", "cannot run"); code != ExitUsage {
+	if r, code := runCLI(t, "decide", "waive", "verify", "--reason", "cannot run"); code != ExitUsage {
 		t.Fatalf("no-go cannot be waived: %d %+v", code, r)
 	}
 	noGo.Verdict = "inconclusive"
@@ -252,7 +252,7 @@ func TestDecideWaive(t *testing.T) {
 	if err := e.st.SaveVerify(noGo); err != nil {
 		t.Fatal(err)
 	}
-	if r, code := gate(t, "decide", "waive", "verify", "--reason", "tool unavailable"); code != ExitOK {
+	if r, code := runCLI(t, "decide", "waive", "verify", "--reason", "tool unavailable"); code != ExitOK {
 		t.Fatalf("inconclusive can be waived: %d %+v", code, r)
 	}
 }

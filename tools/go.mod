@@ -1,4 +1,4 @@
-module gate.tools
+module verify.tools
 
 go 1.27.0
 

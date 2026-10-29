@@ -51,7 +51,7 @@ func authStatus(ctx context.Context, path string, args ...string) bool {
 func runDoctor(env *Env) int {
 	fs := env.Flags("doctor")
 	if !env.Parse(fs) || fs.NArg() > 0 {
-		return env.Fail("doctor", ExitUsage, "usage: gate doctor [--json]", "fix the arguments")
+		return env.Fail("doctor", ExitUsage, "usage: verify doctor [--json]", "fix the arguments")
 	}
 	var steps []state.Step
 	var lines, install, authenticate []string

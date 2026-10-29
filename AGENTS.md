@@ -1,4 +1,4 @@
-# Gate agent entry point
+# Verify agent entry point
 
 Read, in order:
 

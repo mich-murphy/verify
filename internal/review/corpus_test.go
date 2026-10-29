@@ -314,8 +314,8 @@ func TestReviewLiveEvaluation(t *testing.T) {
 	if *reviewEvalOutput == "" || (*reviewEval != "codex" && *reviewEval != "claude") {
 		t.Fatal("live review requires -review-eval=codex|claude and -review-eval-output=NEW_FILE")
 	}
-	claudeModel := cmp.Or(os.Getenv("GATE_CLAUDE_MODEL"), "opus")
-	codexModel := os.Getenv("GATE_CODEX_MODEL")
+	claudeModel := cmp.Or(os.Getenv("VERIFY_CLAUDE_MODEL"), "opus")
+	codexModel := os.Getenv("VERIFY_CODEX_MODEL")
 	reviewer, err := Select(*reviewEval, "", claudeModel, codexModel)
 	if err != nil {
 		t.Fatal(err)
