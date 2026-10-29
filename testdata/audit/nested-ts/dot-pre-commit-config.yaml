@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: nested-oxfmt
+        name: nested formatting check
+        entry: echo formatting
+        language: system
+        stages: [pre-commit]
+      - id: nested-oxlint
+        name: nested lint check
+        entry: echo linting
+        language: system
+        stages: [pre-commit]
+      - id: nested-typecheck
+        name: nested type check
+        entry: echo types
+        language: system
+        stages: [pre-push]
+      - id: nested-test
+        name: nested tests
+        entry: echo tests
+        language: system
+        stages: [pre-push]

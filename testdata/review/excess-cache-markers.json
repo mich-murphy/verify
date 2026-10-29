@@ -1,0 +1,18 @@
+{
+  "ID": "excess-cache-markers",
+  "Path": "fixture.go",
+  "BeforeSHA256": "711a97bd03c5a2cf8343dcb8c0dcc92aeaa3a84abfd6bae55a0e38fe52347e26",
+  "AfterSHA256": "a0a73649aedb0a44117b757f6323c2f3f03d6aa077f32f70b8d0cbc7b92ec25f",
+  "OracleSHA256": "323501426c9548c0264c4a784d78954d145a51fd654504920d82ebe188f827b8",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Truth": "Only the two newest entries may carry cache markers.",
+  "Expect": "Identify the marker-budget regression.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -3,7 +3,7 @@\n // MarkRecent marks at most two of the most recent entries.\n func MarkRecent(entries []string) []string {\n \tout := append([]string(nil), entries...)\n-\tfor i := len(out) - 1; i >= 0 && i >= len(out)-2; i-- {\n+\tfor i := len(out) - 1; i >= 0; i-- {\n \t\tout[i] += \" [cache]\"\n \t}\n \treturn out\n",
+    "Messages": [
+      "Adjust marker placement."
+    ],
+    "Intent": "Adjust marker placement."
+  }
+}

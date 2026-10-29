@@ -1,0 +1,26 @@
+{
+  "ID": "accepted-unchanged",
+  "Path": "fixture.go",
+  "BeforeSHA256": "8f731ac30e8adee25c7f97361bf5fc97f2f9cdc632c61c9385346942f07907af",
+  "AfterSHA256": "fae209bbcec969b58fb0a75756f3d4bde7bf14a627256ea29b49760b1e6637c2",
+  "OracleSHA256": "1d8f866b0798f85f820629a28cade91c3a69896852fc13debbdab1e7b9887912",
+  "BeforePass": false,
+  "AfterPass": true,
+  "Truth": "Whitespace-only names remain permitted in both versions; only the display label changes, so the accepted validation finding should not be re-raised.",
+  "Expect": "Do not re-raise an unchanged accepted finding.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -4,4 +4,4 @@\n func ValidName(name string) bool { return name != \"\" }\n \n // Label adds a display prefix.\n-func Label(name string) string { return \"item: \" + name }\n+func Label(name string) string { return \"entry: \" + name }\n",
+    "Messages": [
+      "Update display label."
+    ],
+    "Intent": "Update display label.",
+    "Prior": [
+      {
+        "ID": "F1",
+        "State": "accepted",
+        "Claim": "Whitespace-only names are permitted by validation.",
+        "Reason": "Accepted: callers may use whitespace-only names."
+      }
+    ]
+  }
+}

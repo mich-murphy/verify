@@ -1,0 +1,26 @@
+{
+  "ID": "resolved-recurrence",
+  "Path": "fixture.go",
+  "BeforeSHA256": "de1e0c42fcee55ab32ae1881e6c5fdce7b2562922e1c6609ae9321d70956c5f3",
+  "AfterSHA256": "727414f86dd370ec4bad2d43e63734e6b1805bb6b1c455369680ca486204fa63",
+  "OracleSHA256": "ca5c5f0265ebfa8cfa4989557c02f734f7b34ceb1520c33a22f831031f74dad2",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Truth": "A previously resolved empty-name bug is reintroduced and merits a new finding.",
+  "Expect": "Identify the recurrence despite the resolved prior disposition.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,4 +1,4 @@\n package fixture\n \n // ValidName rejects an empty name.\n-func ValidName(name string) bool { return name != \"\" }\n+func ValidName(name string) bool { return true }\n",
+    "Messages": [
+      "Simplify name validation."
+    ],
+    "Intent": "Simplify name validation.",
+    "Prior": [
+      {
+        "ID": "F1",
+        "State": "resolved",
+        "Claim": "Empty names allowed",
+        "Reason": "Previous change restored validation."
+      }
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+version: "2"
+run:
+  timeout: 5m
+  tests: true
+  go: "1.27"
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - ineffassign
+    - unused
+    - nilerr
+    - nilnesserr
+    - bodyclose
+    - noctx
+    - contextcheck
+    - reassign
+    - unparam
+    - unconvert
+    - exhaustive
+    - gocritic
+    - revive
+    - gosec
+    - depguard
+    - bidichk
+    - nolintlint
+    - gocyclo
+    - gocognit
+    - dupl
+  settings:
+    gocyclo:
+      min-complexity: 20
+    gocognit:
+      min-complexity: 20
+    dupl:
+      threshold: 150
+    exhaustive:
+      default-signifies-exhaustive: false
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    depguard:
+      rules:
+        lane-pure:
+          files:
+            - "**/internal/lane/*.go"
+            - "!**/*_test.go"
+          deny:
+            - pkg: os/exec
+              desc: lane decisions must not launch processes
+            - pkg: net/http
+              desc: lane decisions must not contact services
+            - pkg: os
+              desc: lane decisions must not touch the OS
+    revive:
+      rules:
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: context-as-argument
+        - name: context-keys-type
+  exclusions:
+    presets: []
+    rules:
+      - path: _test\.go
+        linters: [gocyclo, gocognit, dupl]
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

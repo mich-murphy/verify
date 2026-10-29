@@ -1,0 +1,18 @@
+{
+  "ID": "authorization-removal",
+  "Path": "fixture.go",
+  "BeforeSHA256": "5e00811a0043c1d832b3792c1c0eaf323f586e03cf9e23afdeced7543865858f",
+  "AfterSHA256": "8797bc753e2cb71e3740d1443b396dcfce89a1ddafab1ecd72201493cbce9023",
+  "OracleSHA256": "8b55d978be3740dd06fd4e57363701270785e91b6d1a94dc1f2ace30ec8c9139",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Truth": "A visible document must still require membership.",
+  "Expect": "Identify the authorization regression.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,4 +1,4 @@\n package fixture\n \n // CanRead requires both membership and document visibility.\n-func CanRead(member, visible bool) bool { return member && visible }\n+func CanRead(member, visible bool) bool { return visible }\n",
+    "Messages": [
+      "Simplify access predicate."
+    ],
+    "Intent": "Simplify access predicate."
+  }
+}

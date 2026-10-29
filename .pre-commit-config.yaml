@@ -1,0 +1,37 @@
+# Hook tiers follow SPEC §4.5: pre-commit is the fast tier (scoped to the staged
+# files, run in parallel, check-only); pre-push is the full tier.
+minimum_prek_version: "0.5.0"
+priorities:
+  hygiene: 0
+  checks: 10
+  full: 20
+repos:
+  - repo: builtin
+    hooks:
+      - {id: trailing-whitespace, priority: hygiene, stages: [pre-commit]}
+      - {id: end-of-file-fixer, priority: hygiene, stages: [pre-commit]}
+      - {id: check-merge-conflict, priority: hygiene, stages: [pre-commit]}
+      - {id: check-added-large-files, priority: hygiene, stages: [pre-commit]}
+      - {id: check-yaml, priority: hygiene, stages: [pre-commit]}
+      - {id: detect-private-key, priority: hygiene, stages: [pre-commit]}
+  - repo: local
+    hooks:
+      # Fast tier: file-level tools get the staged files; package-level tools run once when a Go file is staged.
+      - id: fmt-check
+        name: fmt-check
+        entry: scripts/fmt-check.sh
+        language: system
+        types: [go]
+        priority: checks
+        stages: [pre-commit]
+      - {id: lint, name: lint, entry: make lint, language: system, pass_filenames: false, types: [go], priority: checks, stages: [pre-commit]}
+      - {id: actionlint, name: actionlint, entry: make actionlint, language: system, pass_filenames: false, files: '^\.github/workflows/', priority: checks, stages: [pre-commit]}
+      - {id: secrets, name: secrets, entry: make secrets-staged, language: system, pass_filenames: false, priority: checks, stages: [pre-commit]}
+      # Full tier: one race+coverage run, cacheable, all hooks in parallel, scoped to the
+      # blast radius (SPEC §4.5 rule 4). A go.mod/go.sum, Makefile or config change makes
+      # Gate run --all-files, so manifests need no trigger of their own here.
+      - {id: tidy-check, name: tidy-check, entry: make tidy-check, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}
+      - {id: vet, name: vet, entry: make vet, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}
+      - {id: cover, name: cover (race + coverage), entry: make cover TESTFLAGS=, language: system, pass_filenames: false, files: '(\.go$|(^|/)testdata/)', priority: full, stages: [pre-push]}
+      - {id: deadcode, name: deadcode, entry: make deadcode, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}
+      - {id: vuln, name: vuln, entry: make vuln, language: system, pass_filenames: false, types: [go], priority: full, stages: [pre-push]}

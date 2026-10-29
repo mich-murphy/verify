@@ -1,0 +1,11 @@
+.tools/
+.gate-runtime/
+.cover/
+bin/
+.gate-bin/
+coverage.out
+mutation.json
+*.prof
+.DS_Store
+__pycache__/
+*.pyc

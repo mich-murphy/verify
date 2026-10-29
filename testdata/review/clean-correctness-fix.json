@@ -1,0 +1,18 @@
+{
+  "ID": "clean-correctness-fix",
+  "Path": "fixture.go",
+  "BeforeSHA256": "c2f6fc77bf5eb7a76ef64c134f618fff8bbb527dbf91f3f6d7a160f5457eb17c",
+  "AfterSHA256": "a673ec4dd8a5189ad00840907152903fdd196b772414f6c4f0c27e6c733dd47a",
+  "OracleSHA256": "87b3150c6e1eabad976104e004c78c228e2bb76243f3c5b09099d754ac4784f8",
+  "BeforePass": false,
+  "AfterPass": true,
+  "Truth": "The upper bound correction is clean; no new finding is expected.",
+  "Expect": "Do not report an already-fixed bug.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -6,7 +6,7 @@\n \t\treturn low\n \t}\n \tif value > high {\n-\t\treturn high + 1\n+\t\treturn high\n \t}\n \treturn value\n }\n",
+    "Messages": [
+      "Correct upper-bound clamping."
+    ],
+    "Intent": "Correct upper-bound clamping."
+  }
+}

@@ -1,0 +1,8 @@
+verify:
+  surfaces: ["cmd/**", "internal/cli/**"]
+  setup: [go, build, -o, .gate-bin/gate, ./cmd/gate]
+  scenarios:
+    - name: help
+      run: [.gate-bin/gate, --help]
+      exit: 0
+      stdout_contains: "usage"

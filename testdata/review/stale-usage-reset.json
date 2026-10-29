@@ -1,0 +1,18 @@
+{
+  "ID": "stale-usage-reset",
+  "Path": "fixture.go",
+  "BeforeSHA256": "9dedcf96aaa49ef1852026ea376747762a5cdb2f4acf2274680b833a7de5171a",
+  "AfterSHA256": "2f41e057386f879f76bb8fab4b9221dce74bf83da85b7046b563a4c5bd0feb34",
+  "OracleSHA256": "4ac52fc1201f16e9c87fe6f92f23d92bbf570998919e38326c85f06ce065430f",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Truth": "A new usage window must not retain the previous window's credits.",
+  "Expect": "Find the stale-credit regression.",
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -9,7 +9,6 @@\n func (u *Usage) Update(window, credits int) {\n \tif u.Window != window {\n \t\tu.Window = window\n-\t\tu.Credits = 0\n \t}\n \tu.Credits += credits\n }\n",
+    "Messages": [
+      "Update usage window handling."
+    ],
+    "Intent": "Update usage window handling."
+  }
+}
