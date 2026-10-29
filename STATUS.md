@@ -17,7 +17,8 @@ or other applications' source.
 
 Local release checks passed `make ci` and `make check`: formatting, lint, module tidiness,
 workflow validation, secret scanning, race tests, coverage, dead-code and vulnerability checks.
-Total coverage was **85.6%**, with unchanged **80% total / 70% package** floors.
+Total coverage after the marker correction was **85.5%**, with unchanged
+**80% total / 70% package** floors.
 
 Eight original synthetic reviewer examples have hashed before/after source and executable
 Go oracles. Tests replay their exact diffs and require the specified before/after assertion
@@ -32,6 +33,15 @@ settlement; neither is a claim about the interactive TUI or permanent user insta
 The [CI workflow](https://github.com/mich-murphy/verify/actions/workflows/ci.yml) runs the full
 quality gate on Linux and macOS, with prek installed for integration tests. Consult its actual
 run result rather than treating local evidence as remote CI approval.
+
+## Linux marker regression
+
+The first Linux CI run exposed a genuine ownership bug: a deleted file's inode could be reused,
+so file identity alone could mistake a replacement quarantine marker for the original. Markers
+now carry a unique per-acquisition token, verified with bounded content reads before release.
+The original regression remains, with added same-inode, repeat-release and symlink cases.
+A controlled Linux replay observed inode reuse on all 32 runs: the old code failed all 32,
+and the corrected code passed all 32 under the same conditions. No test or threshold was relaxed.
 
 ## Deliberate limits
 

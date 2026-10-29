@@ -168,8 +168,9 @@ Commands use one shared foreground runner with stdin, a timeout, bounded capture
 cleanup. Repository commands inherit the user's environment with `GIT_*` variables removed;
 reviewers use their separate allowlist (§5). A missing tool fails the step, never passes it.
 
-Before reset or repository execution, Gate writes a durable worktree ownership marker. It removes
-the marker only after execution has settled and the marker's identity still matches. Interrupted
+Before reset or repository execution, Gate writes a durable worktree ownership marker with a
+unique per-acquisition token. It removes the marker only after execution has settled and both
+file identity and bounded marker contents still match; inode identity alone can be reused. Interrupted
 or unsettled execution refuses later worktree reuse. Recovery is explicit: inspect and stop any
 surviving processes before removing the marker named in the error, not merely to force a retry.
 

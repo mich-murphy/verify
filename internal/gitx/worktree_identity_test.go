@@ -64,6 +64,108 @@ func TestTrackedIdentityAndDurableQuarantine(t *testing.T) {
 	}
 }
 
+func TestWorktreeMarkerReleaseCannotRemoveSameInodeReplacement(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "check")
+	release, err := BeginWorktreeUse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := WorktreeQuarantine(path)
+	before, err := os.Lstat(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// WriteFile truncates and rewrites the existing inode, deterministically
+	// exposing the weakness of checking only os.SameFile.
+	replacement := []byte("another owner\n")
+	if err := os.WriteFile(marker, replacement, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Lstat(marker)
+	if err != nil || !os.SameFile(before, after) {
+		t.Fatalf("replacement did not retain inode: %v", err)
+	}
+	if err := release(); err == nil {
+		t.Fatal("removed same-inode replacement marker")
+	}
+	// #nosec G304 -- Marker is confined to this test temporary directory.
+	data, err := os.ReadFile(marker)
+	if err != nil || string(data) != string(replacement) {
+		t.Fatalf("replaced marker lost: %q %v", data, err)
+	}
+}
+
+func TestWorktreeMarkerOwnershipTokensAndRepeatRelease(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "check")
+	first, err := BeginWorktreeUse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := WorktreeQuarantine(path)
+	// #nosec G304 -- Marker is confined to this test temporary directory.
+	firstContent, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := BeginWorktreeUse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G304 -- Marker is confined to this test temporary directory.
+	secondContent, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(firstContent) == string(secondContent) {
+		t.Fatal("independent acquisitions reused ownership token")
+	}
+	if err := first(); err == nil {
+		t.Fatal("repeat release removed later owner's marker")
+	}
+	// #nosec G304 -- Marker is confined to this test temporary directory.
+	remaining, err := os.ReadFile(marker)
+	if err != nil || string(remaining) != string(secondContent) {
+		t.Fatalf("later owner's marker lost: %q %v", remaining, err)
+	}
+	if err := second(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorktreeMarkerReleaseCannotRemoveSymlink(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "check")
+	release, err := BeginWorktreeUse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := WorktreeQuarantine(path)
+	// #nosec G304 -- Marker is confined to this test temporary directory.
+	content, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(filepath.Dir(path), "target")
+	// #nosec G703 -- Target is confined to this test temporary directory.
+	if err := os.WriteFile(target, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := release(); err == nil {
+		t.Fatal("removed symlink replacement marker")
+	}
+	if info, err := os.Lstat(marker); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("symlink replacement lost: %v", err)
+	}
+}
+
 func TestWorktreeMarkerReleaseCannotRemoveReplacement(t *testing.T) {
 	dir := t.TempDir()
 	release, err := BeginWorktreeUse(filepath.Join(dir, "check"))

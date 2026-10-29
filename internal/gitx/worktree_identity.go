@@ -2,7 +2,9 @@ package gitx
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,9 +46,14 @@ func CheckWorktreeQuarantine(path string) error {
 // BeginWorktreeUse creates a durable marker before the first worktree command.
 // Call the returned release only after *all* processes have settled. Creation
 // uses O_EXCL: neither a stale marker nor another owner's marker is adopted.
-// Release checks the marker's file identity before removing it.
+// Release checks both file identity and a unique persisted ownership token.
 func BeginWorktreeUse(path string) (release func() error, err error) {
 	marker := WorktreeQuarantine(path)
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, err
+	}
+	content := fmt.Sprintf("worktree in use; if Gate exited unexpectedly, inspect owned processes before removing this marker\nowner: %x\n", nonce)
 	// #nosec G304 -- Marker path derives from a locked Gate-owned worktree path.
 	f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -57,7 +64,7 @@ func BeginWorktreeUse(path string) (release func() error, err error) {
 		_ = f.Close()
 		return nil, err
 	}
-	if _, err = f.WriteString("worktree in use; if Gate exited unexpectedly, inspect owned processes before removing this marker\n"); err != nil {
+	if _, err = f.WriteString(content); err != nil {
 		_ = f.Close()
 		return nil, err
 	}
@@ -72,18 +79,50 @@ func BeginWorktreeUse(path string) (release func() error, err error) {
 		return nil, err
 	}
 	return func() error {
-		current, statErr := os.Lstat(marker)
-		if statErr != nil {
-			return statErr
-		}
-		if !os.SameFile(info, current) {
-			return fmt.Errorf("worktree marker was replaced; refusing to remove %s", marker)
+		if err := checkOwnedMarker(marker, info, content); err != nil {
+			return err
 		}
 		if err := os.Remove(marker); err != nil {
 			return err
 		}
 		return syncMarkerDir(marker)
 	}, nil
+}
+
+func checkOwnedMarker(marker string, info os.FileInfo, content string) error {
+	current, err := os.Lstat(marker)
+	if err != nil {
+		return err
+	}
+	if !current.Mode().IsRegular() || !os.SameFile(info, current) {
+		return fmt.Errorf("worktree marker was replaced; refusing to remove %s", marker)
+	}
+	// #nosec G304 -- Marker path derives from a locked Gate-owned worktree path.
+	f, err := os.Open(marker)
+	if err != nil {
+		return err
+	}
+	opened, statErr := f.Stat()
+	if statErr != nil {
+		_ = f.Close()
+		return statErr
+	}
+	data, readErr := io.ReadAll(io.LimitReader(f, int64(len(content)+1)))
+	closeErr := f.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	current, err = os.Lstat(marker)
+	if err != nil {
+		return err
+	}
+	if !current.Mode().IsRegular() || !os.SameFile(info, opened) || !os.SameFile(info, current) || string(data) != content {
+		return fmt.Errorf("worktree marker was replaced or changed; refusing to remove %s", marker)
+	}
+	return nil
 }
 
 func syncMarkerDir(marker string) error {
