@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -15,6 +14,8 @@ type Change struct {
 	Path           string
 	Added, Deleted int
 	Binary         bool
+	// OldMode and NewMode are exact Git tree modes; 000000 means absent.
+	OldMode, NewMode string
 }
 
 // Changes lists files changed from base to sha (no rename detection).
@@ -27,24 +28,11 @@ func (r *Repo) Changes(ctx context.Context, base, sha string) ([]Change, error) 
 	if err != nil {
 		return nil, err
 	}
-	out, err := r.run(ctx, "diff", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", b, s, "--")
+	out, err := r.run(ctx, "diff", "--raw", "--numstat", "-z", "--no-renames", "--no-ext-diff", "--no-textconv", b, s, "--")
 	if err != nil {
 		return nil, err
 	}
-	var changes []Change
-	for rec := range strings.SplitSeq(string(out), "\x00") {
-		if rec == "" {
-			continue
-		}
-		parts := strings.SplitN(rec, "\t", 3)
-		if len(parts) != 3 {
-			return nil, errors.New("unparseable git numstat record")
-		}
-		add, _ := strconv.Atoi(parts[0]) // "-" for binary files yields 0
-		del, _ := strconv.Atoi(parts[1])
-		changes = append(changes, Change{Path: parts[2], Added: add, Deleted: del, Binary: parts[0] == "-" || parts[1] == "-"})
-	}
-	return changes, nil
+	return parseChangeModes(out)
 }
 
 // Branch returns the current branch name, or "" when HEAD is detached.

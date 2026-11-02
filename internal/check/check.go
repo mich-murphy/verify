@@ -40,7 +40,7 @@ type Outcome struct {
 func ToLane(cs []gitx.Change) []lane.Change {
 	out := make([]lane.Change, len(cs))
 	for i, c := range cs {
-		out[i] = lane.Change{Path: c.Path, Added: c.Added, Deleted: c.Deleted, Binary: c.Binary}
+		out[i] = lane.Change{Path: c.Path, Added: c.Added, Deleted: c.Deleted, Binary: c.Binary, OldMode: c.OldMode, NewMode: c.NewMode}
 	}
 	return out
 }
