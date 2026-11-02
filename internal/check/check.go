@@ -325,8 +325,8 @@ func (rc *runCtx) runPlanned(ctx context.Context, p plannedStep, wt, sha string)
 // finishStage records a prek stage. A failed stage that rewrote tracked files is
 // restored once its findings name them, so the identity check still guards the rest.
 func (rc *runCtx) finishStage(ctx context.Context, stage, wt string, sr stepRun) error {
-	var lines map[string][]string
-	sr.step.Hooks, lines = parsePrekOutput([]byte(sr.out))
+	hooks := parsePrekOutput([]byte(sr.out))
+	sr.step.Hooks = hookResults(hooks)
 	var paths []string
 	if sr.step.Status != state.StatusPass {
 		var err error
@@ -334,7 +334,7 @@ func (rc *runCtx) finishStage(ctx context.Context, stage, wt string, sr stepRun)
 			return err
 		}
 	}
-	rc.record(sr, stageFindings(stage, sr, lines, paths))
+	rc.record(sr, stageFindings(stage, sr, hooks, paths))
 	rc.addFindings(budgetNote(stage, time.Duration(sr.step.DurationMS)*time.Millisecond, stageBudget(stage), sr.step.Hooks))
 	if len(paths) > 0 {
 		return rc.repo.RestoreTracked(ctx, wt)
@@ -368,9 +368,9 @@ func (rc *runCtx) fastPrek(ctx context.Context, out *Outcome) error {
 	if err != nil {
 		return err
 	}
-	var lines map[string][]string
-	sr.step.Hooks, lines = parsePrekOutput([]byte(sr.out))
-	rc.record(sr, stageFindings("pre-commit", sr, lines, nil))
+	hooks := parsePrekOutput([]byte(sr.out))
+	sr.step.Hooks = hookResults(hooks)
+	rc.record(sr, stageFindings("pre-commit", sr, hooks, nil))
 	if d := time.Duration(rc.rec.Steps[len(rc.rec.Steps)-1].DurationMS) * time.Millisecond; d > fastTierBudget {
 		rc.addFindings([]state.Finding{{
 			ID: "check:fast-tier-slow", Source: state.SourceCheck, Rule: "fast-tier-slow",

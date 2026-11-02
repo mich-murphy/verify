@@ -20,22 +20,36 @@ const (
 	maxExcerptBytes = 2048
 )
 
-// parsePrekOutput turns `prek run --verbose --color never` output into one result per
-// hook, in order, and the output lines each hook printed keyed by hook id. Prek names
-// hooks by display name in the header; the id comes from the `- hook id:` line, which
-// prek omits for skipped hooks, so those keep their display name.
-func parsePrekOutput(out []byte) ([]state.HookResult, map[string][]string) {
-	p := &prekParser{lines: map[string][]string{}}
+// prekHook is one hook's result and the output lines it printed.
+type prekHook struct {
+	state.HookResult
+	Body []string
+}
+
+func hookResults(hooks []prekHook) []state.HookResult {
+	var out []state.HookResult
+	for _, h := range hooks {
+		out = append(out, h.HookResult)
+	}
+	return out
+}
+
+// parsePrekOutput turns `prek run --verbose --color never` output into one entry per
+// hook, in order. Prek names hooks by display name in the header; the id comes from
+// the `- hook id:` line, which prek omits for skipped hooks, so those keep their
+// display name. The second and later hooks sharing an id get `#2`, `#3` appended.
+func parsePrekOutput(out []byte) []prekHook {
+	p := &prekParser{seen: map[string]int{}}
 	for _, line := range strings.Split(string(out), "\n") {
 		p.feed(line)
 	}
 	p.end()
-	return p.hooks, p.lines
+	return p.hooks
 }
 
 type prekParser struct {
-	hooks    []state.HookResult
-	lines    map[string][]string
+	hooks    []prekHook
+	seen     map[string]int // hooks per id so far
 	cur      *state.HookResult
 	status   string
 	modified bool
@@ -91,30 +105,29 @@ func (p *prekParser) end() {
 	default:
 		p.cur.Status = state.HookFail
 	}
-	p.hooks = append(p.hooks, *p.cur)
 	for len(p.body) > 0 && p.body[len(p.body)-1] == "" {
 		p.body = p.body[:len(p.body)-1]
 	}
-	if len(p.body) > 0 {
-		p.lines[p.cur.ID] = p.body
+	p.seen[p.cur.ID]++
+	if n := p.seen[p.cur.ID]; n > 1 {
+		p.cur.ID += "#" + strconv.Itoa(n)
 	}
+	p.hooks = append(p.hooks, prekHook{HookResult: *p.cur, Body: p.body})
 	p.cur, p.body = nil, nil
 }
 
 // stageFindings is the agent-facing result of one prek stage: one finding per
 // failed or modifying hook, or one stage finding when prek failed with no
 // parseable hook. paths are the tracked files the stage rewrote.
-func stageFindings(stage string, sr stepRun, lines map[string][]string, paths []string) []state.Finding {
+func stageFindings(stage string, sr stepRun, hooks []prekHook, paths []string) []state.Finding {
 	var fs []state.Finding
-	seen := map[string]bool{}
-	for _, h := range sr.step.Hooks {
-		if (h.Status != state.HookFail && h.Status != state.HookModified) || seen[h.ID] {
+	for _, h := range hooks {
+		if h.Status != state.HookFail && h.Status != state.HookModified {
 			continue
 		}
-		seen[h.ID] = true
 		id := "check:" + stage + ":" + h.ID
 		msg := fmt.Sprintf("%s failed (exit %d)", h.ID, h.ExitCode)
-		if first := firstLine(lines[h.ID]); first != "" {
+		if first := firstLine(h.Body); first != "" {
 			msg += ": " + first
 		}
 		if h.Status == state.HookModified {
@@ -122,7 +135,7 @@ func stageFindings(stage string, sr stepRun, lines map[string][]string, paths []
 		}
 		fs = append(fs, state.Finding{
 			ID: id, Source: state.SourceCheck, Rule: id, Severity: state.SeverityBlock,
-			Message: msg, Hook: h.ID, Log: sr.step.Log, Excerpt: excerpt(lines[h.ID], false),
+			Message: msg, Hook: h.ID, Log: sr.step.Log, Excerpt: excerpt(h.Body, false),
 		})
 	}
 	if len(fs) == 0 && sr.step.Status != state.StatusPass {

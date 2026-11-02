@@ -41,7 +41,13 @@ func TestParsePrekOutput(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hooks, lines := parsePrekOutput(raw)
+			parsed := parsePrekOutput(raw)
+			hooks, lines := hookResults(parsed), map[string][]string{}
+			for _, h := range parsed {
+				if len(h.Body) > 0 {
+					lines[h.ID] = h.Body
+				}
+			}
 			if !reflect.DeepEqual(hooks, c.hooks) {
 				t.Errorf("hooks\n got %+v\nwant %+v", hooks, c.hooks)
 			}
