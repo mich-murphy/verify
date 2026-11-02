@@ -371,14 +371,7 @@ func (rc *runCtx) fastPrek(ctx context.Context, out *Outcome) error {
 	hooks := parsePrekOutput([]byte(sr.out))
 	sr.step.Hooks = hookResults(hooks)
 	rc.record(sr, stageFindings("pre-commit", sr, hooks, nil))
-	if d := time.Duration(rc.rec.Steps[len(rc.rec.Steps)-1].DurationMS) * time.Millisecond; d > fastTierBudget {
-		rc.addFindings([]state.Finding{{
-			ID: "check:fast-tier-slow", Source: state.SourceCheck, Rule: "fast-tier-slow",
-			Severity: state.SeverityNote,
-			Message: fmt.Sprintf("pre-commit stage took %.1fs, over the %.0fs fast-tier budget (SPEC §4.5): move slow hooks to pre-push and scope hooks by types/files",
-				d.Seconds(), fastTierBudget.Seconds()),
-		}})
-	}
+	rc.addFindings(budgetNote("pre-commit", time.Duration(sr.step.DurationMS)*time.Millisecond, fastTierBudget, sr.step.Hooks))
 	return nil
 }
 

@@ -389,7 +389,7 @@ files, environment). CI runs every check completely, with cache-defeating flags 
 
 `verify check --fast` runs the guards and the `pre-commit` stage in place, on local staged,
 unstaged and untracked changes, and writes no record. Agent hooks use it for quick feedback, and `ship` never
-accepts it. It prints the stage duration, and adds a `fast-tier-slow` note when that exceeds 5 s.
+accepts it. It prints the stage duration, and adds a `check:budget:pre-commit` note naming the slowest hooks when that exceeds 5 s.
 The full `verify check` runs both stages on the exact commit, scoped as in §4.2.
 
 ## 5. Review
