@@ -27,14 +27,14 @@ tidy-check:
 	cd tools && go mod tidy -diff
 
 test:
-	go test -race -shuffle=on -count=1 ./...
+	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE go test -race -shuffle=on -count=1 ./...
 
 # CI uses one shuffled, uncached race+coverage run. The pre-push hook passes
 # TESTFLAGS= so Go's test cache applies (SPEC §4.5 full-tier rules).
 TESTFLAGS ?= -shuffle=on -count=1
 
 cover:
-	go test -race $(TESTFLAGS) -coverprofile=coverage.out ./...
+	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE go test -race $(TESTFLAGS) -coverprofile=coverage.out ./...
 	$(GOTOOL) go-test-coverage --config=.testcoverage.yml
 
 deadcode:

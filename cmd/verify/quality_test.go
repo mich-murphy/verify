@@ -141,8 +141,8 @@ func TestQualityTestRunRecipes(t *testing.T) {
 			gate := false
 			for _, line := range strings.Split(string(out), "\n") {
 				line = strings.Join(strings.Fields(line), " ")
-				if strings.HasPrefix(line, "go test ") {
-					runs = append(runs, line)
+				if _, run, ok := strings.Cut(line, "go test "); ok {
+					runs = append(runs, "go test "+run)
 				}
 				if strings.Contains(line, "go-test-coverage --config=.testcoverage.yml") {
 					gate = true
@@ -153,6 +153,42 @@ func TestQualityTestRunRecipes(t *testing.T) {
 			}
 			if gate != tc.coverage {
 				t.Fatalf("coverage gate=%v, want %v\n%s", gate, tc.coverage, out)
+			}
+		})
+	}
+}
+
+// Git exports GIT_DIR to hooks in a linked worktree; tests that run git in a
+// temporary directory would then write into the real repository.
+func TestQualityTestRecipesDropGitHookEnvironment(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"test", "cover"} {
+		t.Run(target, func(t *testing.T) {
+			dir := t.TempDir()
+			record := filepath.Join(dir, "record")
+			stub := filepath.Join(dir, "go")
+			body := "#!/bin/sh\n[ \"$1\" = test ] || exit 0\nenv | grep -E '^GIT_(DIR|WORK_TREE|INDEX_FILE)=' >\"$RECORD\"\necho ran >>\"$RECORD\"\n"
+			// #nosec G306 -- Private executable fixture under t.TempDir needs owner execute permission.
+			if err := os.WriteFile(stub, []byte(body), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			// #nosec G204 -- Fixed recipe with a private test executable, not user-selected commands.
+			cmd := exec.CommandContext(t.Context(), "make", "--no-print-directory", "-f", filepath.Join(root, "Makefile"), target, "GOTOOL="+stub)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "RECORD="+record, "GIT_DIR=/nonexistent/git-dir", "GIT_WORK_TREE=/nonexistent/tree", "GIT_INDEX_FILE=/nonexistent/index", "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("make %s: %v\n%s", target, err, out)
+			}
+			// #nosec G304 -- Path is under t.TempDir.
+			got, err := os.ReadFile(record)
+			if err != nil {
+				t.Fatalf("go test never ran: %v", err)
+			}
+			if string(got) != "ran\n" {
+				t.Fatalf("go test saw git hook variables:\n%s", got)
 			}
 		})
 	}
