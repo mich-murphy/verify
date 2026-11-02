@@ -8,6 +8,7 @@ require (
 	github.com/betterleaks/betterleaks v1.9.0
 	github.com/rs/zerolog v1.33.0
 	go.yaml.in/yaml/v3 v3.0.5
+	pgregory.net/rapid v1.3.0
 )
 
 require (
