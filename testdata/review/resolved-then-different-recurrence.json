@@ -1,0 +1,32 @@
+{
+  "ID": "resolved-then-different-recurrence",
+  "Path": "fixture.go",
+  "BeforeSHA256": "378d976553d7366832d7d770a73f13c38e7ac95f8a405a652b744286814efb18",
+  "AfterSHA256": "3880d51c28832837e1f79a622ee42fb3246af8c488b9aa57c362bc5923d27f5a",
+  "OracleSHA256": "965bfef59e25be843210218783f52ca621b1b5a35412ed21528db8ffa7982b56",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "F1 (uppercase letters kept) was resolved. This diff touches the same function and breaks something else: Replace with a count of 1 hyphenates only the first space. A new finding is required, not a resolved one.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -4,5 +4,5 @@\n \n // Slug lowercases s and joins its words with hyphens.\n func Slug(s string) string {\n-\treturn strings.ReplaceAll(strings.ToLower(s), \" \", \"-\")\n+\treturn strings.Replace(strings.ToLower(s), \" \", \"-\", 1)\n }\n",
+    "Messages": [
+      "Use Replace in Slug."
+    ],
+    "Intent": "Use Replace in Slug.",
+    "Prior": [
+      {
+        "ID": "F1",
+        "State": "resolved",
+        "Claim": "Slug kept uppercase letters.",
+        "Reason": "Fixed by lowercasing the input."
+      }
+    ]
+  }
+}

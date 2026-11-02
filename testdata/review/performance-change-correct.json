@@ -1,0 +1,21 @@
+{
+  "ID": "performance-change-correct",
+  "Path": "fixture.go",
+  "BeforeSHA256": "a76689a9bd88ac0418a5546e0cbc69b6c629c9a636af8658a11ff6b386574646",
+  "AfterSHA256": "1c60149050f8ab9b1fb7cb752153e83e1f4720d16a78c9ae47ee173a8c4b14b8",
+  "OracleSHA256": "c4a6c93b6912852bcbdf3e417607b5126b9cb205c53383e71a9866880dcb24fd",
+  "BeforePass": true,
+  "AfterPass": true,
+  "Why": "Unique keeps first-occurrence order in both versions; only the lookup changes from a linear scan to a map. Silence measures false positives.",
+  "Expect": {
+    "findings": "none",
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -3,17 +3,13 @@\n // Unique returns xs without duplicates, keeping the first occurrence of each.\n func Unique(xs []string) []string {\n \tvar out []string\n+\tseen := make(map[string]struct{}, len(xs))\n \tfor _, x := range xs {\n-\t\tfound := false\n-\t\tfor _, y := range out {\n-\t\t\tif x == y {\n-\t\t\t\tfound = true\n-\t\t\t\tbreak\n-\t\t\t}\n+\t\tif _, ok := seen[x]; ok {\n+\t\t\tcontinue\n \t\t}\n-\t\tif !found {\n-\t\t\tout = append(out, x)\n-\t\t}\n+\t\tseen[x] = struct{}{}\n+\t\tout = append(out, x)\n \t}\n \treturn out\n }\n",
+    "Messages": [
+      "Make Unique linear."
+    ],
+    "Intent": "Make Unique linear instead of quadratic."
+  }
+}

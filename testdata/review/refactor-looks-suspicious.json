@@ -1,0 +1,21 @@
+{
+  "ID": "refactor-looks-suspicious",
+  "Path": "fixture.go",
+  "BeforeSHA256": "6f550b8e34a36cf2e12611fa0e180abbbe014dd81cfcdb873004ddc8c111d1d4",
+  "AfterSHA256": "dc398304cc4d4339af7f762455bb6de9fd5633b462f1fe25d15271ff91bd0325",
+  "OracleSHA256": "1b009e99d7facd01294e0fecc6b416dc902237f82977081883f56633c251244e",
+  "BeforePass": true,
+  "AfterPass": true,
+  "Why": "Behavior is identical. The removed negative-weight clamp is dead because 5 is the floor either way, and the switch preserves the tier order. Silence measures false positives.",
+  "Expect": {
+    "findings": "none",
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,17 +2,15 @@\n \n // Shipping returns the postage in dollars.\n func Shipping(weight int, express bool) int {\n-\tif weight < 0 {\n-\t\tweight = 0\n-\t}\n \tcost := 5\n-\tif weight > 10 {\n+\tswitch {\n+\tcase weight > 10:\n \t\tcost = 12\n-\t} else if weight > 5 {\n+\tcase weight > 5:\n \t\tcost = 8\n \t}\n \tif express {\n-\t\tcost *= 2\n+\t\treturn cost * 2\n \t}\n \treturn cost\n }\n",
+    "Messages": [
+      "Table the shipping tiers."
+    ],
+    "Intent": "Table the shipping tiers."
+  }
+}

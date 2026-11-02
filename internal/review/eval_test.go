@@ -145,7 +145,7 @@ func evaluate(ctx context.Context, rv Reviewer, rec *recorder, model string, cas
 		obs.ReportedModels, obs.Tokens = wrapperInfo(rec.wrapper)
 		if runErr != nil {
 			obs.Error = runErr.Error()
-		} else if parsed, parseErr := Parse(raw, openIDs(p.c.Input), []string{p.c.Path}); parseErr != nil {
+		} else if parsed, parseErr := Parse(raw, openIDs(p.c.Input), p.c.diffPaths()); parseErr != nil {
 			obs.Error = fmt.Sprintf("response validation: %v", parseErr)
 		} else {
 			obs.Parsed = parsed

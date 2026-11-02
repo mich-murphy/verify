@@ -1,0 +1,24 @@
+{
+  "ID": "loop-bound-off-by-one",
+  "Path": "fixture.go",
+  "BeforeSHA256": "603c50a08b785827a62bf3ab4918492a8ba8c00194ad0f80a9b866b32f9a2801",
+  "AfterSHA256": "c532e19380e145e51e229f79809810b5ddc941b0177f355967a3f8bd0989e71c",
+  "OracleSHA256": "b24265fba950b6af5936c5716372a958a1ff488a65db6c669507b07154889937",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "The speed-up stops the loop one byte early, so the last byte is never summed.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -3,7 +3,7 @@\n // Checksum returns the sum of all bytes modulo 256.\n func Checksum(data []byte) byte {\n \tvar sum byte\n-\tfor i := 0; i < len(data); i++ {\n+\tfor i := 0; i < len(data)-1; i++ {\n \t\tsum += data[i]\n \t}\n \treturn sum\n",
+    "Messages": [
+      "Speed up Checksum."
+    ],
+    "Intent": "Speed up Checksum."
+  }
+}

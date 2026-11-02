@@ -1,0 +1,30 @@
+{
+  "ID": "partial-fix-of-f1",
+  "Path": "fixture.go",
+  "BeforeSHA256": "7a82dc09e34f2bce90e8faf34a01f7e9059b0eaf23c7340da1f044164e1ec789",
+  "AfterSHA256": "797520c51d8be073c5cedf61805db3b6a4e58b49e0422db550ccdc7e0fbdda2a",
+  "OracleSHA256": "b40ec10d3396e8fc40c5b3e7d73ad250ca6feb0e82ba9e1b8c2f8f56b4eb6995",
+  "BeforePass": false,
+  "AfterPass": false,
+  "Why": "F1 says Percent is unclamped at both ends. The diff clamps only the lower end, so F1 is still open: it must not be resolved and must not be repeated.",
+  "Expect": {
+    "findings": "none",
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,5 +2,8 @@\n \n // Percent limits v to a valid percentage.\n func Percent(v int) int {\n+\tif v < 0 {\n+\t\treturn 0\n+\t}\n \treturn v\n }\n",
+    "Messages": [
+      "Clamp negative percentages."
+    ],
+    "Intent": "Clamp negative percentages.",
+    "Open": [
+      {
+        "ID": "F1",
+        "Kind": "correctness",
+        "Path": "fixture.go",
+        "Line": 5,
+        "Claim": "Percent returns out-of-range values: Percent(-5) and Percent(150) are not clamped to 0..100."
+      }
+    ]
+  }
+}
