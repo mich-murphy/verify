@@ -139,7 +139,8 @@ func TestEvaluateStopsAtFirstUnavailable(t *testing.T) {
 }
 
 func TestWrapperInfoClaude(t *testing.T) {
-	wrapper := `{"is_error":false,"usage":{"input_tokens":4,"cache_creation_input_tokens":647,"cache_read_input_tokens":3882,"output_tokens":549},` +
+	wrapper := `{"is_error":false,"usage":{"input_tokens":4,"cache_creation_input_tokens":647,"cache_read_input_tokens":3882,"output_tokens":549,` +
+		`"output_tokens_details":{"thinking_tokens":0},"cache_creation":{"ephemeral_1h_input_tokens":647},"iterations":[{"type":"message"}],"fallback_credit":null},` +
 		`"modelUsage":{"claude-opus-5-5":{"inputTokens":4}},"structured_output":{}}`
 	models, tokens := wrapperInfo([]byte(wrapper))
 	if !slices.Equal(models, []string{"claude-opus-5-5"}) || tokens != (evalTokens{Input: 4, Output: 549, CacheRead: 3882, CacheCreation: 647}) {
