@@ -44,6 +44,11 @@ type Finding struct {
 	Message  string `json:"message"`
 	Repro    *Repro `json:"repro,omitempty"`
 	State    string `json:"state"`
+	// Hook, Log and Excerpt locate a check failure: the failing hook, the
+	// per-attempt log path, and at most 20 lines (2 KiB) of its output.
+	Hook    string `json:"hook,omitempty"`
+	Log     string `json:"log,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // Blocking reports whether the finding is open and blocks.
@@ -58,13 +63,30 @@ const (
 	StatusSkipped = "skipped"
 )
 
+// Hook statuses, as parsed from prek output.
+const (
+	HookPass     = "pass"
+	HookFail     = "fail"
+	HookSkipped  = "skipped"
+	HookModified = "modified"
+)
+
+// HookResult is one prek hook inside a prek stage step.
+type HookResult struct {
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	DurationMs int64  `json:"duration_ms"`
+	ExitCode   int    `json:"exit_code,omitempty"`
+}
+
 // Step is one executed command.
 type Step struct {
-	Name       string `json:"name"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMS int64  `json:"duration_ms"`
-	Log        string `json:"log,omitempty"`
-	Status     string `json:"status"`
+	Name       string       `json:"name"`
+	ExitCode   int          `json:"exit_code"`
+	DurationMS int64        `json:"duration_ms"`
+	Log        string       `json:"log,omitempty"`
+	Status     string       `json:"status"`
+	Hooks      []HookResult `json:"hooks,omitempty"`
 }
 
 // Decision kinds.
@@ -119,6 +141,8 @@ type CheckRecord struct {
 	Steps         []Step    `json:"steps"`
 	Findings      []Finding `json:"findings"`
 	ConfigFromCan bool      `json:"config_from_candidate,omitempty"`
+	Attempt       int       `json:"attempt"`
+	LogDir        string    `json:"log_dir"`
 	Started       time.Time `json:"started"`
 	Finished      time.Time `json:"finished"`
 }
