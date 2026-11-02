@@ -54,6 +54,8 @@ does not build against the newer release that other tools pull in. Drop the
   gitx, glob, guard, lane, onboard, pkgmgr, review, runner, ship, state, verify.
   `internal/lane` is pure: no `os`, `os/exec` or `net/http` (enforced by depguard).
 - Table-driven tests. Test behaviour, not implementation.
+  `make test` and `make cover` unset `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`, which git exports to
+  hooks in a linked worktree and which would send a test's `git -C <tmpdir>` into the real repository.
 - Fail closed: a missing tool, corrupt record or unknown config key is an error,
   never a pass.
 - Records are `/1`. No schema version stacks and no migrations.
