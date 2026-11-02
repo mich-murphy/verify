@@ -11,6 +11,7 @@ import (
 
 	"github.com/mich-murphy/verify/internal/audit"
 	"github.com/mich-murphy/verify/internal/config"
+	"github.com/mich-murphy/verify/internal/eligible"
 	"github.com/mich-murphy/verify/internal/gitx"
 	"github.com/mich-murphy/verify/internal/guard"
 	"github.com/mich-murphy/verify/internal/lane"
@@ -111,6 +112,13 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 		return out, nil
 	}
 
+	blocked, err := rc.guardsBlock(ctx, gf)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return rc.shortCircuit(cfg, out)
+	}
 	if err := rc.inWorktree(ctx, sha, cfg); err != nil {
 		return nil, err
 	}
@@ -120,6 +128,61 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// guardsBlock reports whether a guard finding blocks and no accept decision on
+// this SHA covers it. A covered finding lets the hooks run, so accepting a guard
+// finding never stands in for them.
+func (rc *runCtx) guardsBlock(ctx context.Context, gf []state.Finding) (bool, error) {
+	name, err := rc.repo.Branch(ctx)
+	if err != nil {
+		return false, err
+	}
+	var decisions []state.Decision
+	if name != "" {
+		br, err := rc.store.LoadBranch(name)
+		if err != nil {
+			return false, err
+		}
+		decisions = br.Decisions
+	}
+	probe := &state.CheckRecord{Status: state.StatusFail, Findings: gf}
+	return len(eligible.AssessCheck(probe, decisions, rc.rec.SHA).Blocking) > 0, nil
+}
+
+// shortCircuit records every planned step as skipped and returns without
+// entering the worktree. The plan comes from the checkout, not the exact SHA.
+func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error) {
+	for _, p := range preparePlan(cfg, rc.repo.Root) {
+		rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: "prepare-" + p.Name, Status: state.StatusSkipped})
+	}
+	prek, err := config.PrekConfig(rc.repo.Root)
+	if err != nil {
+		return nil, err
+	}
+	if prek != "" {
+		for _, st := range config.Stages() {
+			rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: "prek-" + st, Status: state.StatusSkipped})
+		}
+	}
+	out.Notes = append(out.Notes, "guards blocked; hooks skipped")
+	rc.rec.Finished = time.Now().UTC()
+	rc.rec.Status = status(rc.rec)
+	if err := rc.store.SaveCheck(rc.rec); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// preparePlan is the configured prepare list, else the install command derived from dir.
+func preparePlan(cfg config.Config, dir string) []config.Check {
+	if len(cfg.Prepare) > 0 {
+		return cfg.Prepare
+	}
+	if cmd := pkgmgr.InstallCommand(dir); cmd != nil {
+		return []config.Check{{Name: "deps", Run: cmd, Timeout: config.Duration(10 * time.Minute)}}
+	}
+	return nil
 }
 
 func validateFastRef(ctx context.Context, repo *gitx.Repo, sha string, fast bool) error {
@@ -191,13 +254,7 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 func (rc *runCtx) runWorktreeSteps(ctx context.Context, wt, sha string, cfg config.Config) error {
 	// prepare: makes the fresh worktree runnable (e.g. npm ci). A failure
 	// skips the remaining steps, which could only fail for the same reason.
-	prepare := cfg.Prepare
-	if len(prepare) == 0 {
-		if cmd := pkgmgr.InstallCommand(wt); cmd != nil {
-			prepare = []config.Check{{Name: "deps", Run: cmd, Timeout: config.Duration(10 * time.Minute)}}
-		}
-	}
-	for _, p := range prepare {
+	for _, p := range preparePlan(cfg, wt) {
 		passed, err := rc.step(ctx, "prepare-"+p.Name, p.Run, wt, p.Timeout.Std(), true)
 		if err != nil {
 			return err

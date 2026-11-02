@@ -116,7 +116,7 @@ func AssessCheck(chk *state.CheckRecord, decisions []state.Decision, sha string)
 		}
 	}
 	for _, s := range chk.Steps {
-		if s.Status == state.StatusFail {
+		if s.Status == state.StatusFail || s.Status == state.StatusSkipped {
 			out.Passing = false
 		}
 	}
