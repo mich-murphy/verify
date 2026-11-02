@@ -6,8 +6,11 @@
   "OracleSHA256": "87b3150c6e1eabad976104e004c78c228e2bb76243f3c5b09099d754ac4784f8",
   "BeforePass": false,
   "AfterPass": true,
-  "Truth": "The upper bound correction is clean; no new finding is expected.",
-  "Expect": "Do not report an already-fixed bug.",
+  "Why": "The upper bound correction is clean; no new finding is expected.",
+  "Expect": {
+    "findings": "none",
+    "resolved": []
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -6,7 +6,7 @@\n \t\treturn low\n \t}\n \tif value > high {\n-\t\treturn high + 1\n+\t\treturn high\n \t}\n \treturn value\n }\n",
     "Messages": [

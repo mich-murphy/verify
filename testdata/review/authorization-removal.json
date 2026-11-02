@@ -6,8 +6,14 @@
   "OracleSHA256": "8b55d978be3740dd06fd4e57363701270785e91b6d1a94dc1f2ace30ec8c9139",
   "BeforePass": true,
   "AfterPass": false,
-  "Truth": "A visible document must still require membership.",
-  "Expect": "Identify the authorization regression.",
+  "Why": "A visible document must still require membership.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,4 +1,4 @@\n package fixture\n \n // CanRead requires both membership and document visibility.\n-func CanRead(member, visible bool) bool { return member && visible }\n+func CanRead(member, visible bool) bool { return visible }\n",
     "Messages": [

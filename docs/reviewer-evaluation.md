@@ -1,9 +1,41 @@
-# Synthetic reviewer corpus
+# Reviewer evaluation
 
-`testdata/review/` contains eight newly authored, small Go examples. They are synthetic illustrations of reviewer behavior, not extracted repository changes or evidence of historical or live model performance. Each case has `before.go`, `after.go`, `oracle_test.go` and a JSON manifest. No external source, commit identity or historical provenance is implied.
+`testdata/review/` holds synthetic Go cases, each a `before.go`, `after.go`, `oracle_test.go` and a JSON manifest. They are newly authored illustrations, not extracted repository changes. No external source or history is implied.
 
-The manifest records SHA-256 hashes of the exact fixture bytes, the expected pass/fail result of the oracle before and after the change, a private ground-truth description, and the review `Input`. The integrity test verifies every hash, replays each unified diff against the exact before bytes to produce the after bytes, executes each original oracle against both versions in isolated temporary directories using the standard Go toolchain, and ensures answer/oracle material is not in the packet. A failing oracle must fail an assertion, not just fail to compile. These checks validate the synthetic examples; they do **not** establish whether any reviewer will detect them.
+## Manifest
 
-The eight behaviors are stale usage after window reset, excess cache markers, removed authorization, opt-out redirect regression, a repair resolving open F1, a clean correctness fix, an accepted unchanged finding and a resolved finding recurring. The accepted case changes a display label while whitespace-only names remain accepted by validation in both source versions; the recurrence case reintroduces a resolved empty-name validation issue.
+- `Expect` is the scored answer, parsed once when the corpus loads. A case that needs a finding has `path`, `kind`, `blocking` and `repro`. A silent case has `"findings": "none"`. Every case has `resolved`, the exact set of open IDs the diff fixes (`[]` when none may be resolved).
+- `Why` is free text for humans and is never sent to a reviewer.
+- The hashes, the oracle verdicts before and after, and the review `Input` complete the manifest.
 
-Ordinary tests never invoke a reviewer. An explicit, potentially subscription-consuming experiment requires both `-review-eval=codex|claude` and `-review-eval-output=NEW_FILE` (optionally `-review-eval-case=ID`) on `go test ./internal/review -run '^TestReviewLiveEvaluation$' -args ...`. The output path must not exist: it is reserved before calls, written with owner-only permissions, and synced after each observation. Every observation records the requested model, raw bounded CLI output, usage, duration and packet/prompt hashes. The reviewer CLI applies its own bounded output and no-tools settings. Keep these experiment files private; a new corpus has **not** been live-evaluated here. Never use a routine quality run to opt in.
+## Integrity (runs in ordinary tests)
+
+`TestReviewCorpusIntegrity` verifies every hash, replays each diff against the exact before bytes, runs the oracle against both versions, and checks the packet stays under 8 KiB and contains none of `Why`, the encoded `Expect`, the hashes or oracle names. It proves the cases are well formed. It says nothing about any reviewer.
+
+## Live run
+
+`make review-eval` calls the `claude` subscription CLI once per case and writes `.verify-eval/claude-<timestamp>.json` (gitignored). Calls go only through subscription CLIs, never a billed API, so this never runs in CI. Set `VERIFY_CLAUDE_MODEL` to choose a model (default `opus`). For codex, run the same `go test` command by hand with `-review-eval=codex`.
+
+The run aborts on the first `ErrUnavailable` (missing CLI, login, quota), so an outage costs one attempt. `-review-eval-case=ID` runs a single case. The output path must not exist.
+
+## Scoring
+
+Per case the test fails unless:
+
+- a required finding exists with that path, kind, blocking severity and a non-null repro;
+- a silent case has zero findings;
+- `resolved` equals the expected set exactly.
+
+Extra findings on a bug case are not failures. They appear in `Notes` so precision is visible without failing recall.
+
+## Reading the output
+
+The file is a JSON array with one object per call:
+
+- `Pass`, `Failures`, `Notes`: the verdict, why it failed, and extra findings.
+- `Parsed`: the validated response. `Raw`: the answer as returned. `Error`: an unavailable reviewer or invalid output.
+- `Wrapper`: the CLI's full stdout (claude's result object, codex's JSONL events). Check `permission_denials` and `num_turns` there to audit tool use.
+- `ReportedModels` and `Tokens` (input, output, cache read, cache creation): taken from the wrapper, not from the requested model.
+- `Duration`, `PromptSHA256`, `PacketSHA256`.
+
+Keep these files private. A passing live run on these cases supports the claim that this reviewer found these seeded defects, not that Verify catches defects in general.

@@ -2,7 +2,7 @@
 GOTOOL := go tool -modfile=tools/go.mod
 GOFILES = $$(git ls-files --cached --others --exclude-standard --deduplicate '*.go' | while IFS= read -r file; do if [ -f "$$file" ]; then printf '%s\n' "$$file"; fi; done)
 
-.PHONY: build fmt fmt-check lint vet tidy-check test cover deadcode vuln secrets secrets-staged actionlint check ci
+.PHONY: build fmt fmt-check lint vet tidy-check test cover deadcode vuln secrets secrets-staged actionlint check ci review-eval
 
 build:
 	go build -o bin/verify ./cmd/verify
@@ -60,3 +60,10 @@ check:
 
 # CI entry point: same targets, no prek.
 ci: fmt-check tidy-check lint secrets actionlint vet cover deadcode vuln
+
+# Live reviewer accuracy run through the subscription CLI; never part of CI.
+# See docs/reviewer-evaluation.md.
+review-eval:
+	mkdir -p .verify-eval
+	go test ./internal/review -run '^TestReviewLiveEvaluation$$' -count=1 -v -timeout 30m \
+		-args -review-eval=claude -review-eval-output=$(CURDIR)/.verify-eval/claude-$$(date +%Y%m%dT%H%M%S).json
