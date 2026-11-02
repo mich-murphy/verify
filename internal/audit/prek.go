@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/mich-murphy/verify/internal/config"
 	"github.com/mich-murphy/verify/internal/runner"
@@ -19,9 +22,18 @@ const prekTimeout = 60 * time.Second
 var ErrUnsettled = errors.New("audit subprocess cleanup incomplete")
 
 // hook is one entry of `prek list --output-format json`.
+// Filter and command fields come from the config file; id, language and the
+// resolved stages come from `prek list`.
 type hook struct {
-	ID     string   `json:"id"`
-	Stages []string `json:"stages"`
+	ID        string   `json:"id" yaml:"id"`
+	Stages    []string `json:"stages" yaml:"stages"`
+	Language  string   `json:"language" yaml:"language"`
+	Entry     string   `json:"-" yaml:"entry"`
+	Files     string   `json:"-" yaml:"files"`
+	Exclude   string   `json:"-" yaml:"exclude"`
+	Types     []string `json:"-" yaml:"types"`
+	TypesOr   []string `json:"-" yaml:"types_or"`
+	AlwaysRun bool     `json:"-" yaml:"always_run"`
 }
 
 func (h hook) at(stage string) bool { return slices.Contains(h.Stages, stage) }
@@ -61,7 +73,36 @@ func listHooks(ctx context.Context, dir string) (hooks []hook, found bool, err e
 	if jerr := json.Unmarshal([]byte(res.Stdout.Output), &hooks); jerr != nil {
 		return nil, true, fmt.Errorf("cannot parse `prek list` output: %w", jerr)
 	}
+	mergeConfigFields(path, hooks)
 	return hooks, true, nil
+}
+
+// mergeConfigFields copies the filter and entry fields of the YAML config onto
+// the listed hooks. A prek.toml or an unreadable file leaves them empty, so the
+// notes that need them are skipped rather than guessed.
+func mergeConfigFields(path string, hooks []hook) {
+	b, err := os.ReadFile(path) // #nosec G304 -- repository config selected by config.PrekConfig
+	if err != nil {
+		return
+	}
+	var cfg struct {
+		Repos []struct {
+			Hooks []hook `yaml:"hooks"`
+		} `yaml:"repos"`
+	}
+	if yaml.Unmarshal(b, &cfg) != nil {
+		return
+	}
+	for _, r := range cfg.Repos {
+		for _, c := range r.Hooks {
+			for i := range hooks {
+				if hooks[i].ID == c.ID {
+					hooks[i].Entry, hooks[i].Files, hooks[i].Exclude = c.Entry, c.Files, c.Exclude
+					hooks[i].Types, hooks[i].TypesOr, hooks[i].AlwaysRun = c.Types, c.TypesOr, c.AlwaysRun
+				}
+			}
+		}
+	}
 }
 
 // rule is a hook obligation: the standard ID first, then accepted alternatives.
