@@ -94,7 +94,7 @@ func runStatus(env *Env) int {
 	if verr != nil {
 		return env.Fail("status", verr.code, verr.msg, verr.next)
 	}
-	res := Result{Command: "status", SHA: v.sha, Lane: v.lane.Lane, Status: "ok", Steps: v.recs.stepsOrNil(), Findings: v.recs.findings()}
+	res := Result{Command: "status", SHA: v.sha, Lane: v.lane.Lane, Status: "ok", Steps: v.recs.stepsOrNil(), Findings: eligible.EffectiveFindings(v.recs.chk, v.recs.rev, v.recs.ver, v.recs.br, v.sha)}
 	if len(v.elig.Blocking) > 0 {
 		res.Status = "blocked-by-findings"
 	}
@@ -122,7 +122,14 @@ func runStatus(env *Env) int {
 	}
 	res.NextAction = v.elig.NextAction
 	res.Message = strings.Join(lines, "\n")
-	return env.Emit(res, ExitOK)
+	code := ExitBlocked
+	switch {
+	case v.elig.Eligible:
+		code = ExitOK
+	case res.Status == "blocked-by-findings":
+		code = ExitFindings
+	}
+	return env.Emit(res, code)
 }
 
 func eligibilityLines(e eligible.Result) []string {
@@ -187,10 +194,6 @@ func (r records) stepsOrNil() []state.Step {
 		return nil
 	}
 	return r.chk.Steps
-}
-
-func (r records) findings() []state.Finding {
-	return eligible.Findings(r.chk, r.rev, r.ver, r.br)
 }
 
 func (r records) summary(budget int) []string {

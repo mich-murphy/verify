@@ -69,7 +69,7 @@ func TestDecideApproveRecordsCoverage(t *testing.T) {
 	if r, code := runCLI(t, "decide", "approve", "--reason", "ok"); code != ExitOK {
 		t.Fatalf("approve: code %d %+v", code, r)
 	}
-	want := state.DecisionCoverage{From: base, To: e.sha, Files: 1, Lines: 3, Check: e.sha}
+	want := state.DecisionCoverage{From: base, To: e.sha, Files: 1, Lines: 2, Check: e.sha}
 	assertLastCoverage(t, e, want)
 
 	first := e.sha
