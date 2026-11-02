@@ -254,7 +254,7 @@ func TestFastSlowTierIsANoteNotAFailure(t *testing.T) {
 	}
 	var found bool
 	for _, f := range out.Record.Findings {
-		if f.ID == "check:fast-tier-slow" {
+		if f.ID == "check:budget:pre-commit" {
 			found = f.Severity == state.SeverityNote && f.Source == state.SourceCheck && strings.Contains(f.Message, "§4.5")
 		}
 	}
