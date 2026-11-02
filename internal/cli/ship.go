@@ -39,6 +39,10 @@ func runShip(env *Env) int {
 	switch {
 	case err != nil:
 		res.Status = "blocked"
+		if *dry {
+			res.NextAction = "fix the remote error above and rerun verify ship --dry-run"
+			return env.Emit(res, ExitBlocked)
+		}
 		res.Message += "\n" + doneRemaining(rep)
 		res.NextAction = "resolve the error above and rerun verify ship; completed steps are safe to repeat"
 		return env.Emit(res, ExitBlocked)

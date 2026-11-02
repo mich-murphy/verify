@@ -68,7 +68,7 @@ func actions(o Options) []action {
 	ref := "refs/heads/" + o.Branch
 	return []action{
 		{"push", fmt.Sprintf("git push --force-with-lease=%s:<remote value> %s %s:%s", ref, o.Remote, o.SHA, ref), pushStep},
-		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create or gh pr edit (base %s)", o.Branch, o.Target, o.Base), prStep},
+		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create (title %q, base %s) or gh pr edit", o.Branch, o.Target, o.Title, o.Base), prStep},
 		{"status", fmt.Sprintf("gh api --hostname github.com -X POST repos/%s/statuses/%s -f state=success -f context=verify/verified", o.Target, o.SHA), statusStep},
 	}
 }
@@ -79,6 +79,14 @@ func Run(ctx context.Context, o Options) (Report, error) {
 	var rep Report
 	target, err := remoteTarget(ctx, o)
 	if err != nil {
+		if o.DryRun {
+			o.Target = "<owner/repo>"
+			for _, a := range actions(o) {
+				rep.Steps = append(rep.Steps, Step{a.name, Planned, a.plan})
+			}
+			rep.Steps = append(rep.Steps, Step{"remote", Failed, err.Error()})
+			return rep, err
+		}
 		rep.Steps = []Step{{"push", Failed, err.Error()}, {"pr", Pending, ""}, {"status", Pending, ""}}
 		return rep, err
 	}
