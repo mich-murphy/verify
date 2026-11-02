@@ -205,10 +205,10 @@ func (rc *runCtx) reuse(ctx context.Context, out *Outcome) (bool, error) {
 		return false, err
 	}
 	rc.rec.PrekVersion = rc.prekVersion(ctx)
-	prior, ok := rc.reusable()
+	prior, sameCommit, ok := rc.reusable()
 	if ok {
 		out.Record = prior
-		if prior.ReusedFrom == "" {
+		if sameCommit {
 			out.Notes = append(out.Notes, "check already passed for this commit")
 		} else {
 			out.Notes = append(out.Notes, "reused check from "+prior.ReusedFrom+" (identical tree)")
@@ -229,21 +229,22 @@ func (rc *runCtx) prekVersion(ctx context.Context) string {
 // reusable builds the record for rc.rec from an earlier passing check that
 // covered the same tree under the same merge base, lane, scope and prek version.
 // It keeps this run's guard findings and takes the earlier steps and other
-// findings, then recomputes the status.
-func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
+// findings, then recomputes the status. sameCommit reports that the earlier
+// check was of this very commit, so its record is returned unchanged.
+func (rc *runCtx) reusable() (rec *state.CheckRecord, sameCommit, ok bool) {
 	cur := rc.rec
 	sha, err := rc.store.LoadTree(cur.Tree)
 	if err != nil {
-		return nil, false
+		return nil, false, false
 	}
 	old, err := rc.store.LoadCheck(sha)
 	if err != nil || old.Status != "pass" || old.Tree != cur.Tree || old.MergeBase != cur.MergeBase ||
 		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion ||
 		time.Since(old.Finished) > reuseMaxAge {
-		return nil, false
+		return nil, false, false
 	}
 	if old.SHA == cur.SHA {
-		return old, true
+		return old, true, true
 	}
 	reused := *cur
 	// Started and Finished stay the earlier run's, so a reuse never makes the evidence look younger.
@@ -256,9 +257,9 @@ func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
 	}
 	reused.Status = status(&reused)
 	if err = rc.store.SaveCheck(&reused); err != nil {
-		return nil, false
+		return nil, false, false
 	}
-	return &reused, true
+	return &reused, false, true
 }
 
 func validateFastRef(ctx context.Context, repo *gitx.Repo, sha string, fast bool) error {
