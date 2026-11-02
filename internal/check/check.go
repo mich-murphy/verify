@@ -116,13 +116,6 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 	}
 	rc := &runCtx{repo: repo, store: state.Open(repo.CommonDir), run: rn, rec: rec}
 
-	if !opt.Fast {
-		reused, err := rc.reuse(ctx, out)
-		if err != nil || reused {
-			return out, err
-		}
-	}
-
 	guardBase := loaded.MergeBase
 	if opt.Fast {
 		guardBase = sha
@@ -138,6 +131,10 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 			return nil, err
 		}
 		return out, nil
+	}
+
+	if reused, err := rc.reuse(ctx, out); err != nil || reused {
+		return out, err
 	}
 
 	blocked, err := rc.guardsBlock(ctx, gf)
@@ -197,7 +194,8 @@ func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error
 	return out, nil
 }
 
-// reuse points out at an earlier passing record for the same tree, if any.
+// reuse swaps out for a record built from an earlier passing one on the same tree,
+// if any. Guards have already run on this history, so their findings stay.
 func (rc *runCtx) reuse(ctx context.Context, out *Outcome) (bool, error) {
 	var err error
 	if rc.rec.Tree, err = rc.repo.Tree(ctx, rc.rec.SHA); err != nil {
@@ -221,8 +219,10 @@ func (rc *runCtx) prekVersion(ctx context.Context) string {
 	return strings.TrimSpace(r.Stdout.Output)
 }
 
-// reusable returns the saved record for rc.rec when an earlier passing check
+// reusable builds the record for rc.rec from an earlier passing check that
 // covered the same tree under the same merge base, lane, scope and prek version.
+// It keeps this run's guard findings and takes the earlier steps and other
+// findings, then recomputes the status.
 func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
 	cur := rc.rec
 	sha, err := rc.store.LoadTree(cur.Tree)
@@ -234,8 +234,16 @@ func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
 		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion {
 		return nil, false
 	}
-	reused := *old
-	reused.SHA, reused.ReusedFrom = cur.SHA, old.SHA
+	reused := *cur
+	// Started and Finished stay the earlier run's, so a reuse never makes the evidence look younger.
+	reused.ReusedFrom, reused.Steps, reused.Attempt = old.SHA, old.Steps, old.Attempt
+	reused.Started, reused.Finished = old.Started, old.Finished
+	for _, f := range old.Findings {
+		if f.Source != state.SourceGuard {
+			reused.Findings = append(reused.Findings, f)
+		}
+	}
+	reused.Status = status(&reused)
 	if err = rc.store.SaveCheck(&reused); err != nil {
 		return nil, false
 	}

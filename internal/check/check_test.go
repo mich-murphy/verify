@@ -919,8 +919,8 @@ func TestReuseStillRunsGuardsOnTheNewHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := second.Record
-	if r.Status != "fail" || r.ReusedFrom != "" || !slices.ContainsFunc(r.Findings, func(f state.Finding) bool { return strings.HasPrefix(f.ID, "guard:secrets") }) {
-		t.Fatalf("status %s, reused from %q, findings %+v", r.Status, r.ReusedFrom, r.Findings)
+	if r.Status != "fail" || !slices.ContainsFunc(r.Findings, func(f state.Finding) bool { return strings.HasPrefix(f.ID, "guard:secrets") }) {
+		t.Fatalf("status %s, findings %+v", r.Status, r.Findings)
 	}
 	if n := stageRuns(t, calls); n != 2 {
 		t.Fatalf("prek ran %d stages, want only the first branch's 2", n)
