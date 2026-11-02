@@ -1,0 +1,8 @@
+unleash:
+  workers: 1
+  timeout-coefficient: 60
+  test-cpu: 2
+  exclude-files:
+    - (^|/)check\.go$
+  threshold:
+    efficacy: 85

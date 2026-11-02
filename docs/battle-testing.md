@@ -133,6 +133,38 @@ Runner/gitx were refreshed after optimization; unaffected core benchmark source 
 Pure scans exclude Git, real checks, dependencies and reviewer cost. Remaining per-file Git work
 still makes 100 files materially slower than one; these data do not justify a universal latency claim.
 
+## Mutation
+
+Command: `make mutate` (gremlins v0.6.0, pinned as a tool in `tools/go.mod`, settings in
+`.gremlins.yaml`; `check.go` is excluded so only `scope.go` is mutated, and with it included the
+package had 63 killed, 0 lived, 5 not covered). Run outside CI on 2026-11-02, macOS arm64,
+Go 1.27.3, one worker.
+Only gremlins' default mutators run (conditionals boundary and negation, arithmetic base,
+increment/decrement, invert negatives). A mutant is "not covered" when the package's own
+tests never execute it; gremlins does not try it.
+
+| Package | Killed | Lived | Not covered | Efficacy (killed / killed+lived) | Killed of all mutants |
+|---|---:|---:|---:|---:|---:|
+| eligible | 64 | 0 | 1 | 100% | 98.5% |
+| check (scope.go only) | 4 | 0 | 0 | 100% | 100% |
+| review | 74 | 0 | 17 | 100% | 81.3% |
+| lane | 10 | 0 | 6 | 100% | 62.5% |
+| guard | 25 | 0 | 15 | 100% | 62.5% |
+
+No mutant survived. The 85 percent target holds on efficacy but not on killed-of-all for
+review, lane and guard, because uncovered mutants are the gap. Pointers to missing behavioural tests:
+
+- `lane.go:91` no lane test removes lines from a lock file or changes one as binary.
+- `lane.go:49` `IsManifestOrLockfile` is exercised only from `internal/check`, not by a lane test.
+- `response.go:101,103` no test sends a negative line, an empty claim or an over-long claim.
+- `reviewer.go:265,267` Codex `error` and `turn.failed` events with an empty message.
+- `eligible.go:276` the non-parked Sign-off approval requirement.
+- `guard/suppress.go:38,39` the Go test-pattern and non-empty `what` branches.
+- `suppress.go:18-22` and `prompt.go:30-36` are string concatenations of `+`; these are noise, not missing tests.
+
+Timeout coefficient 60 was needed: at gremlins' default, fast packages (lane, eligible) were
+reported as timed out because the mutant compile outlasts the sub-second coverage run.
+
 ## Risk, recovery and limits
 
 No live reviewer accuracy, real GitHub shipping, remote CI approval, real package installation
