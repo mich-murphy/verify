@@ -103,10 +103,10 @@ func (s *Store) Lock(ctx context.Context) (func(), error) {
 // LockFile takes an exclusive flock on path (creating it and its directory)
 // and returns the unlock function. It blocks until the lock is free.
 func LockFile(_ context.Context, path string) (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // #nosec G703 -- Verify-owned lock path.
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- Verify-owned lock path.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 G703 -- Verify-owned lock path.
 	if err != nil {
 		return nil, err
 	}

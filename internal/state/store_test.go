@@ -1,9 +1,15 @@
 package state
 
 import (
+	"bufio"
+	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -325,5 +331,82 @@ func TestNextAttemptCreatesNothingAndSkipsExisting(t *testing.T) {
 	}
 	if n, err = s.NextAttempt(sha); err != nil || n != 4 {
 		t.Fatalf("after attempt 3: attempt %d, %v", n, err)
+	}
+}
+
+// TestLockHolderHelper is not a test: it is the lock-holding child process of the lock wait tests.
+func TestLockHolderHelper(t *testing.T) {
+	path := os.Getenv("VERIFY_LOCK_HOLDER")
+	if path == "" {
+		t.Skip("helper process")
+	}
+	if _, err := LockFile(context.Background(), path); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("locked")
+	_, _ = io.Copy(io.Discard, os.Stdin) // hold until the parent closes stdin
+}
+
+func captureStderr(t *testing.T) func() string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = f
+	t.Cleanup(func() { os.Stderr = orig })
+	return func() string {
+		b, _ := os.ReadFile(f.Name()) // #nosec G304 -- test-owned temp file
+		return string(b)
+	}
+}
+
+func TestLockWaitNamesHolderAndHonoursCancel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "check.lock")
+	child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestLockHolderHelper$") // #nosec G204 G702 -- re-executes this test binary
+	child.Env = append(os.Environ(), "VERIFY_LOCK_HOLDER="+path)
+	stdin, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := child.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stdin.Close(); _ = child.Wait() })
+	if line, _ := bufio.NewReader(stdout).ReadString('\n'); line != "locked\n" {
+		t.Fatalf("helper said %q", line)
+	}
+
+	stderr := captureStderr(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	time.AfterFunc(500*time.Millisecond, cancel)
+	start := time.Now()
+	_, err = LockFile(ctx, path)
+	if !errors.Is(err, context.Canceled) || time.Since(start) > time.Second {
+		t.Fatalf("got %v after %v", err, time.Since(start))
+	}
+	if want := fmt.Sprintf("waiting for check.lock held by pid %d\n", child.Process.Pid); stderr() != want {
+		t.Fatalf("stderr %q, want %q", stderr(), want)
+	}
+}
+
+func TestUncontendedLockIsSilentAndRecordsPid(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "check.lock")
+	stderr := captureStderr(t)
+	unlock, err := LockFile(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if got := stderr(); got != "" {
+		t.Fatalf("stderr %q", got)
+	}
+	if b, _ := os.ReadFile(path); string(b) != strconv.Itoa(os.Getpid()) { // #nosec G304 -- test-owned temp path
+		t.Fatalf("lock file holds %q", b)
 	}
 }
