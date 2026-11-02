@@ -2,6 +2,7 @@ package check
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/mich-murphy/verify/internal/lane"
@@ -35,5 +36,16 @@ func computeScope(mergeBase string, paths []string) (scope, reason string) {
 			return ScopeFull, "task-runner file changed: " + p
 		}
 	}
+	if len(paths) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !isFixture(p) }) {
+		return ScopeFull, "fixture-only change"
+	}
 	return ScopeAffected, ""
+}
+
+var fixtureDirs = []string{"testdata", "fixtures", "__fixtures__", "__snapshots__", "snapshots"}
+
+// isFixture reports whether a directory component of p names fixture data. A
+// scoped run cannot tell which tests read it.
+func isFixture(p string) bool {
+	return slices.ContainsFunc(strings.Split(path.Dir(p), "/"), func(d string) bool { return slices.Contains(fixtureDirs, d) })
 }

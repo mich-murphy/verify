@@ -208,6 +208,9 @@ Checks run only on the change's blast radius. Verify computes the scope once per
   everything: a package manifest or lockfile (`go.mod`, `go.sum`, `package.json`, any lockfile),
   quality config (the Sign-off list in §3, which includes the prek config and CI workflows),
   `verify.yaml`, or a task-runner file (`Makefile`, `justfile`, `Taskfile*`, `mise.toml`).
+- `full` (reason `fixture-only change`) when every changed path has a directory named `testdata`,
+  `fixtures`, `__fixtures__`, `__snapshots__` or `snapshots`, because a scoped run cannot tell which
+  tests read a fixture.
 - `affected` otherwise.
 
 For each stage, Verify runs `prek run --from-ref <merge-base> --to-ref <sha> --stage <stage>` when
