@@ -54,7 +54,7 @@ func runReview(env *Env) int {
 	if *choice == "" {
 		*choice = cmp.Or(os.Getenv("VERIFY_REVIEWER"), "auto")
 	}
-	rv, err := review.Select(*choice, os.Getenv("VERIFY_AUTHOR"), cmp.Or(os.Getenv("VERIFY_CLAUDE_MODEL"), "opus"), os.Getenv("VERIFY_CODEX_MODEL"))
+	rv, fallback, err := selectReviewers(*choice)
 	if err != nil {
 		return env.Fail("review", ExitUsage, err.Error(), "set VERIFY_REVIEWER or --reviewer to auto, claude or codex")
 	}
@@ -91,10 +91,26 @@ func runReview(env *Env) int {
 	if msg, next = reviewBudget(st, name, br); msg != "" {
 		return blocked(msg, next)
 	}
-	return runPlannedReview(env, repo, st, rv, br, *intentFile, name, sha, loaded.MergeBase, l.Lane)
+	return runPlannedReview(env, repo, st, rv, fallback, br, *intentFile, name, sha, loaded.MergeBase, l.Lane)
 }
 
-func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv review.Reviewer, br *state.Branch, intentFile, name, sha, mergeBase, laneName string) int {
+// selectReviewers returns the chosen reviewer and, only for auto, the other
+// family to try once if the first is unavailable.
+func selectReviewers(choice string) (rv, fallback review.Reviewer, err error) {
+	claudeModel, codexModel := cmp.Or(os.Getenv("VERIFY_CLAUDE_MODEL"), "opus"), os.Getenv("VERIFY_CODEX_MODEL")
+	rv, err = review.Select(choice, os.Getenv("VERIFY_AUTHOR"), claudeModel, codexModel)
+	if err != nil || choice != "auto" {
+		return rv, nil, err
+	}
+	other := "claude"
+	if rv.Name() == "claude" {
+		other = "codex"
+	}
+	fallback, err = review.Select(other, "", claudeModel, codexModel)
+	return rv, fallback, err
+}
+
+func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv, fallback review.Reviewer, br *state.Branch, intentFile, name, sha, mergeBase, laneName string) int {
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
 	intent := ""
 	if intentFile != "" {
@@ -111,14 +127,22 @@ func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv review.Revi
 		}
 		return blocked(err.Error(), "resolve the git error")
 	}
-	return finishReview(env, st, rv, plan, name, sha, mergeBase, laneName)
+	return finishReview(env, st, rv, fallback, plan, name, sha, mergeBase, laneName)
 }
 
-func finishReview(env *Env, st *state.Store, rv review.Reviewer, plan reviewPlan, name, sha, mergeBase, laneName string) int {
+func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan reviewPlan, name, sha, mergeBase, laneName string) int {
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
-	resp, used, attempts, err := callReviewer(env, rv, plan, func() error {
+	countAttempt := func() error {
 		return st.UpdateBranch(name, func(b *state.Branch) error { b.ReviewAttempts++; return nil })
-	})
+	}
+	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt)
+	fallbackFrom := ""
+	if errors.Is(err, review.ErrUnavailable) && used == 0 && fallback != nil {
+		fallbackFrom, rv = rv.Name(), fallback
+		var more int
+		resp, used, more, err = callReviewer(env, rv, plan, countAttempt)
+		attempts += more
+	}
 	if err != nil {
 		if used > 0 {
 			if uerr := st.UpdateBranch(name, func(b *state.Branch) error { b.ReviewCalls += used; return nil }); uerr != nil {
@@ -142,7 +166,7 @@ func finishReview(env *Env, st *state.Store, rv review.Reviewer, plan reviewPlan
 		}
 	}
 	rec := &state.ReviewRecord{
-		SHA: sha, MergeBase: mergeBase, Branch: name, Reviewer: rv.Name(), Delta: plan.delta, Status: status, Findings: open,
+		SHA: sha, MergeBase: mergeBase, Branch: name, Reviewer: rv.Name(), FallbackFrom: fallbackFrom, Delta: plan.delta, Status: status, Findings: open,
 		Resolved: resp.Resolved, Finished: time.Now().UTC(), CallsUsed: used, Attempts: attempts,
 	}
 	if err := st.SaveReview(rec); err != nil {
