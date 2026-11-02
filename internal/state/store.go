@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -53,6 +54,35 @@ func (s *Store) LogPath(sha, step string) (string, error) {
 	}
 	name := url.PathEscape(step)
 	return filepath.Join(d, "logs", name+".log"), nil
+}
+
+// AttemptDir is the absolute runs/<sha>/logs/<n>, where check attempt n keeps its logs.
+func (s *Store) AttemptDir(sha string, n int) (string, error) {
+	d, err := s.RunDir(sha)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(filepath.Join(d, "logs", strconv.Itoa(n)))
+}
+
+// NextAttempt is the number of the next check attempt on sha. It creates nothing;
+// the caller holds check.lock, so no other attempt can claim the number first.
+func (s *Store) NextAttempt(sha string) (int, error) {
+	d, err := s.RunDir(sha)
+	if err != nil {
+		return 0, err
+	}
+	ents, err := os.ReadDir(filepath.Join(d, "logs"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return 0, err
+	}
+	n := 0
+	for _, e := range ents {
+		if k, aerr := strconv.Atoi(e.Name()); aerr == nil && e.IsDir() && k > n {
+			n = k
+		}
+	}
+	return n + 1, nil
 }
 
 // BranchPath is branches/<branch>.json; slashes in branch names are escaped.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ const prekTimeout = 30 * time.Minute
 
 // fastTierBudget is the SPEC §4.5 pre-commit budget; a variable so tests can lower it.
 var fastTierBudget = 5 * time.Second
+
+// fullTierBudget is the SPEC §4.5 pre-push budget; a variable so tests can lower it.
+var fullTierBudget = 20 * time.Second
 
 // Options selects what to check.
 type Options struct {
@@ -52,6 +56,23 @@ type runCtx struct {
 	run       *runner.Runner
 	rec       *state.CheckRecord
 	unsettled bool
+	logDir    string // this attempt's log directory, set once the worktree is ready
+}
+
+// stepRun is one finished command: its step record, stdout (what prek's hooks print) and full log text.
+type stepRun struct {
+	step state.Step
+	out  string
+	log  string
+	msg  string
+}
+
+// plannedStep is a command the check will run; stage is set for prek stages.
+type plannedStep struct {
+	name    string
+	argv    []string
+	timeout time.Duration
+	stage   string
 }
 
 // Run checks the exact commit named by opt.Ref.
@@ -153,17 +174,12 @@ func (rc *runCtx) guardsBlock(ctx context.Context, gf []state.Finding) (bool, er
 // shortCircuit records every planned step as skipped and returns without
 // entering the worktree. The plan comes from the checkout, not the exact SHA.
 func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error) {
-	for _, p := range preparePlan(cfg, rc.repo.Root) {
-		rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: "prepare-" + p.Name, Status: state.StatusSkipped})
-	}
-	prek, err := config.PrekConfig(rc.repo.Root)
+	steps, err := plan(rc.repo.Root, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if prek != "" {
-		for _, st := range config.Stages() {
-			rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: "prek-" + st, Status: state.StatusSkipped})
-		}
+	for _, p := range steps {
+		rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: p.name, Status: state.StatusSkipped})
 	}
 	out.Notes = append(out.Notes, "guards blocked; hooks skipped")
 	rc.rec.Finished = time.Now().UTC()
@@ -172,17 +188,6 @@ func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error
 		return nil, err
 	}
 	return out, nil
-}
-
-// preparePlan is the configured prepare list, else the install command derived from dir.
-func preparePlan(cfg config.Config, dir string) []config.Check {
-	if len(cfg.Prepare) > 0 {
-		return cfg.Prepare
-	}
-	if cmd := pkgmgr.InstallCommand(dir); cmd != nil {
-		return []config.Check{{Name: "deps", Run: cmd, Timeout: config.Duration(10 * time.Minute)}}
-	}
-	return nil
 }
 
 func validateFastRef(ctx context.Context, repo *gitx.Repo, sha string, fast bool) error {
@@ -239,6 +244,12 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 		rc.unsettled = true
 		return fmt.Errorf("prepare worktree: %w", err)
 	}
+	if rc.rec.Attempt, err = rc.store.NextAttempt(sha); err != nil {
+		return fmt.Errorf("number attempt: %w", err)
+	}
+	if rc.logDir, err = rc.store.AttemptDir(sha, rc.rec.Attempt); err != nil {
+		return fmt.Errorf("attempt logs: %w", err)
+	}
 	rep, aerr := audit.Run(ctx, wt, cfg)
 	if aerr != nil {
 		rc.unsettled = errors.Is(aerr, audit.ErrUnsettled)
@@ -252,33 +263,94 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 }
 
 func (rc *runCtx) runWorktreeSteps(ctx context.Context, wt, sha string, cfg config.Config) error {
-	// prepare: makes the fresh worktree runnable (e.g. npm ci). A failure
-	// skips the remaining steps, which could only fail for the same reason.
-	for _, p := range preparePlan(cfg, wt) {
-		passed, err := rc.step(ctx, "prepare-"+p.Name, p.Run, wt, p.Timeout.Std(), true)
+	steps, err := plan(wt, cfg)
+	if err != nil {
+		return err
+	}
+	for i, p := range steps {
+		passed, err := rc.runPlanned(ctx, p, wt, sha)
 		if err != nil {
 			return err
 		}
-		if err = rc.repo.AssertWorktreeIdentity(ctx, wt, sha); err != nil {
-			return err
-		}
 		if !passed {
+			// Later steps could only fail for the same reason; record them as not run.
+			for _, later := range steps[i+1:] {
+				rc.rec.Steps = append(rc.rec.Steps, state.Step{Name: later.name, Status: state.StatusSkipped})
+			}
 			return nil
 		}
 	}
-	if prek, err := config.PrekConfig(wt); err != nil {
-		return err
-	} else if prek != "" {
-		for _, st := range config.Stages() {
-			if _, err := rc.step(ctx, "prek-"+st, prekArgs(st, rc.rec.Scope, rc.rec.MergeBase, rc.rec.SHA), wt, prekTimeout, true); err != nil {
-				return err
-			}
-			if err := rc.repo.AssertWorktreeIdentity(ctx, wt, sha); err != nil {
-				return err
-			}
+	return nil
+}
+
+// plan lists the steps in run order: prepare (configured, else derived from the
+// lockfile, which makes the fresh worktree runnable), then each prek stage.
+func plan(wt string, cfg config.Config) ([]plannedStep, error) {
+	prepare := cfg.Prepare
+	if len(prepare) == 0 {
+		if cmd := pkgmgr.InstallCommand(wt); cmd != nil {
+			prepare = []config.Check{{Name: "deps", Run: cmd, Timeout: config.Duration(10 * time.Minute)}}
 		}
 	}
+	var steps []plannedStep
+	for _, p := range prepare {
+		steps = append(steps, plannedStep{name: "prepare-" + p.Name, argv: p.Run, timeout: p.Timeout.Std()})
+	}
+	prek, err := config.PrekConfig(wt)
+	if err != nil || prek == "" {
+		return steps, err
+	}
+	for _, st := range config.Stages() {
+		steps = append(steps, plannedStep{name: "prek-" + st, stage: st, timeout: prekTimeout})
+	}
+	return steps, nil
+}
+
+func (rc *runCtx) runPlanned(ctx context.Context, p plannedStep, wt, sha string) (bool, error) {
+	argv := p.argv
+	if p.stage != "" {
+		argv = prekArgs(p.stage, rc.rec.Scope, rc.rec.MergeBase, rc.rec.SHA)
+	}
+	sr, err := rc.exec(ctx, p.name, argv, wt, p.timeout, true)
+	if err != nil {
+		return false, err
+	}
+	if p.stage == "" {
+		rc.record(sr, stepFindings(p.name, sr))
+	} else if err = rc.finishStage(ctx, p.stage, wt, sr); err != nil {
+		return false, err
+	}
+	if err = rc.repo.AssertWorktreeIdentity(ctx, wt, sha); err != nil {
+		return false, err
+	}
+	return sr.step.Status == state.StatusPass, nil
+}
+
+// finishStage records a prek stage. A failed stage that rewrote tracked files is
+// restored once its findings name them, so the identity check still guards the rest.
+func (rc *runCtx) finishStage(ctx context.Context, stage, wt string, sr stepRun) error {
+	hooks := parsePrekOutput([]byte(sr.out))
+	sr.step.Hooks = hookResults(hooks)
+	var paths []string
+	if sr.step.Status != state.StatusPass {
+		var err error
+		if paths, err = rc.repo.TrackedChanges(ctx, wt); err != nil {
+			return err
+		}
+	}
+	rc.record(sr, stageFindings(stage, sr, hooks, paths))
+	rc.addFindings(budgetNote(stage, time.Duration(sr.step.DurationMS)*time.Millisecond, stageBudget(stage), sr.step.Hooks))
+	if len(paths) > 0 {
+		return rc.repo.RestoreTracked(ctx, wt)
+	}
 	return nil
+}
+
+func stageBudget(stage string) time.Duration {
+	if stage == "pre-commit" {
+		return fastTierBudget
+	}
+	return fullTierBudget
 }
 
 // fastPrek runs the pre-commit stage in place on the files changed in the
@@ -296,17 +368,14 @@ func (rc *runCtx) fastPrek(ctx context.Context, out *Outcome) error {
 	}
 	argv := append(prekArgs("pre-commit", "", "", ""), "--files")
 	argv = append(argv, files...)
-	if _, err := rc.step(ctx, name, argv, rc.repo.Root, prekTimeout, false); err != nil {
+	sr, err := rc.exec(ctx, name, argv, rc.repo.Root, prekTimeout, false)
+	if err != nil {
 		return err
 	}
-	if d := time.Duration(rc.rec.Steps[len(rc.rec.Steps)-1].DurationMS) * time.Millisecond; d > fastTierBudget {
-		rc.addFindings([]state.Finding{{
-			ID: "check:fast-tier-slow", Source: state.SourceCheck, Rule: "fast-tier-slow",
-			Severity: state.SeverityNote,
-			Message: fmt.Sprintf("pre-commit stage took %.1fs, over the %.0fs fast-tier budget (SPEC §4.5): move slow hooks to pre-push and scope hooks by types/files",
-				d.Seconds(), fastTierBudget.Seconds()),
-		}})
-	}
+	hooks := parsePrekOutput([]byte(sr.out))
+	sr.step.Hooks = hookResults(hooks)
+	rc.record(sr, stageFindings("pre-commit", sr, hooks, nil))
+	rc.addFindings(budgetNote("pre-commit", time.Duration(sr.step.DurationMS)*time.Millisecond, fastTierBudget, sr.step.Hooks))
 	return nil
 }
 
@@ -320,7 +389,8 @@ func prekArgs(stage, scope, from, to string) []string {
 	case ScopeFull:
 		a = append(a, "--all-files")
 	}
-	return append(a, "--stage", stage, "--no-progress", "--color", "never")
+	// --verbose adds each hook's id and duration to passing hooks, which the budget note needs.
+	return append(a, "--stage", stage, "--no-progress", "--color", "never", "--verbose")
 }
 
 func (rc *runCtx) addFindings(fs []state.Finding) {
@@ -335,61 +405,74 @@ func (rc *runCtx) addFindings(fs []state.Finding) {
 	}
 }
 
-// step runs one command through the runner, logs it and records a finding on failure.
-func (rc *runCtx) step(ctx context.Context, name string, argv []string, dir string, timeout time.Duration, persist bool) (passed bool, runErr error) {
+// exec runs one command through the runner and, when persist is set, writes its
+// log under the attempt's log directory. The caller records the result.
+func (rc *runCtx) exec(ctx context.Context, name string, argv []string, dir string, timeout time.Duration, persist bool) (stepRun, error) {
 	r, err := rc.run.Run(ctx, runner.Command{Args: argv, Dir: dir, Timeout: timeout})
 	if persist && err == nil && !r.Settled {
 		rc.unsettled = true
 	}
-	step, log, msg := stepEvidence(name, r, err)
+	sr := stepEvidence(name, r, err)
+	sr.out = r.Stdout.Output
 	if persist {
-		p, perr := rc.store.LogPath(rc.rec.SHA, name)
-		if perr != nil {
-			return false, perr
+		sr.step.Log = filepath.Join(rc.logDir, url.PathEscape(name)+".log")
+		if err = state.WriteAtomic(sr.step.Log, []byte(sr.log)); err != nil {
+			return stepRun{}, err
 		}
-		if perr = state.WriteAtomic(p, []byte(log)); perr != nil {
-			return false, perr
-		}
-		step.Log = p
 	}
-	rc.rec.Steps = append(rc.rec.Steps, step)
-	if step.Status != state.StatusPass {
-		text := fmt.Sprintf("step %q failed: %s", name, msg)
-		if step.Log != "" {
-			text += "; log: " + step.Log
-		}
-		rc.addFindings([]state.Finding{{
-			ID: "check:" + name, Source: state.SourceCheck, Rule: "check:" + name,
-			Severity: state.SeverityBlock, Message: text,
-		}})
-	}
-	return step.Status == state.StatusPass, nil
+	return sr, nil
 }
 
-func stepEvidence(name string, r runner.Result, err error) (step state.Step, log, msg string) {
-	step = state.Step{Name: name, ExitCode: -1, Status: state.StatusFail}
+func (rc *runCtx) record(sr stepRun, fs []state.Finding) {
+	rc.rec.Steps = append(rc.rec.Steps, sr.step)
+	rc.addFindings(fs)
+}
+
+// stepFindings is the generic failure finding for a prepare step.
+func stepFindings(name string, sr stepRun) []state.Finding {
+	if sr.step.Status == state.StatusPass {
+		return nil
+	}
+	return []state.Finding{stepFailure(name, sr)}
+}
+
+func stepFailure(name string, sr stepRun) state.Finding {
+	text := fmt.Sprintf("step %q failed: %s", name, sr.msg)
+	if sr.step.Log != "" {
+		text += "; log: " + sr.step.Log
+	}
+	id := "check:" + name
+	return state.Finding{
+		ID: id, Source: state.SourceCheck, Rule: id, Severity: state.SeverityBlock,
+		Message: text, Log: sr.step.Log, Excerpt: excerpt(strings.Split(strings.TrimSpace(sr.log), "\n"), true),
+	}
+}
+
+func stepEvidence(name string, r runner.Result, err error) (sr stepRun) {
+	sr.step = state.Step{Name: name, ExitCode: -1, Status: state.StatusFail}
 	var b strings.Builder
 	if err != nil {
-		msg = err.Error()
+		sr.msg = err.Error()
 	} else {
-		step.ExitCode = r.ExitCode
+		sr.step.ExitCode = r.ExitCode
 		if !r.Started.IsZero() {
-			step.DurationMS = r.Finished.Sub(r.Started).Milliseconds()
+			sr.step.DurationMS = r.Finished.Sub(r.Started).Milliseconds()
 		}
 		if r.Status == runner.Pass {
-			step.Status = state.StatusPass
+			sr.step.Status = state.StatusPass
 		} else {
-			msg = fmt.Sprintf("%s (%s)", r.Status, r.Error)
+			sr.msg = fmt.Sprintf("%s (%s)", r.Status, r.Error)
 		}
 		b.WriteString(r.Stdout.Output)
 		if r.Stderr.Output != "" {
 			b.WriteString("\n--- stderr ---\n" + r.Stderr.Output)
 		}
 	}
-	if msg != "" {
-		_, _ = fmt.Fprintf(&b, "\n--- verify: %s ---\n", msg)
+	if sr.msg != "" {
+		_, _ = fmt.Fprintf(&b, "\n--- verify: %s ---\n", sr.msg)
 	}
-	return step, b.String(), msg
+	sr.log = b.String()
+	return sr
 }
 
 func status(rec *state.CheckRecord) string {

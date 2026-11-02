@@ -1,0 +1,14 @@
+ok hook..................................................................Passed
+- hook id: ok-hook
+- duration: 0.32s
+lint things..............................................................Failed
+- hook id: lint
+- duration: 0.00s
+- exit code: 2
+
+  a.go:3: bad thing
+  second line
+fix eof..................................................................Failed
+- hook id: end-of-file-fixer
+- duration: 0.01s
+- files were modified by this hook

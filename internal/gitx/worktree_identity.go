@@ -22,10 +22,36 @@ func (r *Repo) AssertWorktreeIdentity(ctx context.Context, dir, sha string) erro
 	}
 	for _, args := range [][]string{{"diff", "--quiet", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--cached", "HEAD", "--"}, {"diff", "--quiet", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--"}} {
 		if _, err := r.runIn(ctx, dir, args...); err != nil {
-			return fmt.Errorf("tracked worktree/index differs from %s: %w", sha, err)
+			paths, _ := r.TrackedChanges(ctx, dir)
+			return fmt.Errorf("tracked worktree/index differs from %s (%s): %w", sha, strings.Join(paths, ", "), err)
 		}
 	}
 	return nil
+}
+
+// TrackedChanges lists tracked paths whose index or worktree content differs from HEAD.
+func (r *Repo) TrackedChanges(ctx context.Context, dir string) ([]string, error) {
+	out, err := r.runIn(ctx, dir, "status", "--porcelain", "-z", "--untracked-files=no")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, e := range strings.Split(string(out), "\x00") {
+		if len(e) > 3 {
+			paths = append(paths, e[3:])
+		}
+	}
+	return paths, nil
+}
+
+// RestoreTracked puts tracked files back to HEAD and removes untracked files,
+// keeping ignored ones (installed dependencies).
+func (r *Repo) RestoreTracked(ctx context.Context, dir string) error {
+	if _, err := r.runIn(ctx, dir, "checkout", "HEAD", "--", "."); err != nil {
+		return err
+	}
+	_, err := r.runIn(ctx, dir, "clean", "-fdq")
+	return err
 }
 
 // WorktreeQuarantine persists in-progress ownership and incomplete cleanup across
