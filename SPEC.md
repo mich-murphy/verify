@@ -122,7 +122,10 @@ State lives under `<git-common-dir>/verify/`. Linked worktrees share it, and it 
 | `runs/<sha>/review.json` | `verify.review/1` record. |
 | `runs/<sha>/verify.json` | `verify.verify/1` record. |
 | `runs/<sha>/logs/<attempt>/<step>.log` | Step output. A check run on the same SHA starts a new attempt (1, 2, …) and never overwrites an earlier one. |
+| `trees/<tree>.json` | `verify.tree/1` index: the latest SHA whose check passed on that git tree. |
 | `lock` | Lock file. |
+
+`check` reuses a passing record when the tree index points at a SHA whose check passed with the same merge-base, lane, scope and prek version, copying it to the new SHA with `reused_from` set and running nothing; `--fast` never reuses.
 
 Writes are atomic (temp file, fsync, rename) and are made while holding the lock. Branch and log
 names are reversibly escaped to avoid collisions. Every record has version `/1`; there are no

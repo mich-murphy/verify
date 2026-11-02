@@ -76,6 +76,9 @@ func validateCheck(r *CheckRecord) error {
 	if !validStatus(r.Status) {
 		return invalid("invalid check status %q", r.Status)
 	}
+	if r.Tree != "" && !validSHA(r.Tree) || r.ReusedFrom != "" && !validSHA(r.ReusedFrom) {
+		return invalid("check has an invalid tree or reused_from")
+	}
 	if r.Started.IsZero() || r.Finished.IsZero() || r.Finished.Before(r.Started) {
 		return invalid("check requires ordered execution timestamps")
 	}

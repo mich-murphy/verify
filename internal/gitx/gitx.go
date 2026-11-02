@@ -128,6 +128,19 @@ func (r *Repo) foreground(ctx context.Context, dir string, args []string, env ma
 
 var oidPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 
+// Tree returns the tree object of an exact commit.
+func (r *Repo) Tree(ctx context.Context, sha string) (string, error) {
+	out, err := r.run(ctx, "rev-parse", "--verify", "--end-of-options", sha+"^{tree}")
+	if err != nil {
+		return "", err
+	}
+	oid := strings.TrimSpace(string(out))
+	if !oidPattern.MatchString(oid) {
+		return "", errors.New("invalid tree OID")
+	}
+	return oid, nil
+}
+
 // Resolve returns the exact commit for a ref/revision, rejecting option injection.
 func (r *Repo) Resolve(ctx context.Context, ref string) (string, error) {
 	if ref == "" || strings.HasPrefix(ref, "-") || strings.ContainsAny(ref, "\x00\r\n") {

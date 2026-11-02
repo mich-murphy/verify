@@ -116,6 +116,13 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 	}
 	rc := &runCtx{repo: repo, store: state.Open(repo.CommonDir), run: rn, rec: rec}
 
+	if !opt.Fast {
+		reused, err := rc.reuse(ctx, out)
+		if err != nil || reused {
+			return out, err
+		}
+	}
+
 	guardBase := loaded.MergeBase
 	if opt.Fast {
 		guardBase = sha
@@ -188,6 +195,51 @@ func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error
 		return nil, err
 	}
 	return out, nil
+}
+
+// reuse points out at an earlier passing record for the same tree, if any.
+func (rc *runCtx) reuse(ctx context.Context, out *Outcome) (bool, error) {
+	var err error
+	if rc.rec.Tree, err = rc.repo.Tree(ctx, rc.rec.SHA); err != nil {
+		return false, err
+	}
+	rc.rec.PrekVersion = rc.prekVersion(ctx)
+	prior, ok := rc.reusable()
+	if ok {
+		out.Record = prior
+		out.Notes = append(out.Notes, "reused check from "+prior.ReusedFrom+" (identical tree)")
+	}
+	return ok, nil
+}
+
+// prekVersion is prek's own version line, or empty when prek cannot report one.
+func (rc *runCtx) prekVersion(ctx context.Context) string {
+	r, err := rc.run.Run(ctx, runner.Command{Args: []string{"prek", "--version"}, Dir: rc.repo.Root, Timeout: 10 * time.Second})
+	if err != nil || r.Status != runner.Pass {
+		return ""
+	}
+	return strings.TrimSpace(r.Stdout.Output)
+}
+
+// reusable returns the saved record for rc.rec when an earlier passing check
+// covered the same tree under the same merge base, lane, scope and prek version.
+func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
+	cur := rc.rec
+	sha, err := rc.store.LoadTree(cur.Tree)
+	if err != nil {
+		return nil, false
+	}
+	old, err := rc.store.LoadCheck(sha)
+	if err != nil || old.Status != "pass" || old.Tree != cur.Tree || old.MergeBase != cur.MergeBase ||
+		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion {
+		return nil, false
+	}
+	reused := *old
+	reused.SHA, reused.ReusedFrom = cur.SHA, old.SHA
+	if err = rc.store.SaveCheck(&reused); err != nil {
+		return nil, false
+	}
+	return &reused, true
 }
 
 func validateFastRef(ctx context.Context, repo *gitx.Repo, sha string, fast bool) error {

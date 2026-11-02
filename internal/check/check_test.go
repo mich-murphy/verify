@@ -193,7 +193,7 @@ func argLogPrek(t *testing.T) string {
 	bin := t.TempDir()
 	logf := filepath.Join(t.TempDir(), "args.log")
 	t.Setenv("PREK_ARGS_LOG", logf)
-	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\necho \"$*\" >> \"$PREK_ARGS_LOG\"\nexit 0\n"
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.0.0'; exit 0; fi\necho \"$*\" >> \"$PREK_ARGS_LOG\"\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
 		t.Fatal(err)
 	}
@@ -892,5 +892,18 @@ func TestDifferentScopeIsNotReused(t *testing.T) {
 	second, err := Run(t.Context(), repo, Options{})
 	if err != nil || second.Record.ReusedFrom != "" || second.Record.Scope != ScopeAffected || stageRuns(t, calls) != 4 {
 		t.Fatalf("%+v %v, stage runs %d", second.Record, err, stageRuns(t, calls))
+	}
+}
+
+func TestSameShaRecheckIsReused(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := Run(t.Context(), repo, Options{})
+	if err != nil || again.Record.SHA != first.Record.SHA || again.Record.ReusedFrom != first.Record.SHA || stageRuns(t, calls) != 2 {
+		t.Fatalf("%+v %v, stage runs %d", again.Record, err, stageRuns(t, calls))
 	}
 }
