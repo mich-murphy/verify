@@ -1,6 +1,7 @@
 // Package audit implements the setup audit (SPEC §4.3). Hooks come from
-// `prek list`; every other obligation is read from tool config files. The
-// audit never reads Makefiles or package scripts.
+// `prek list` plus the filter and entry fields of the YAML config; every other
+// obligation is read from tool config files. The audit reads a Makefile only
+// to resolve a `make <target>` hook entry, and never package scripts.
 package audit
 
 import (
@@ -40,6 +41,7 @@ type Obligation struct {
 type Report struct {
 	Profile     string // go | typescript | mixed | ""
 	Obligations []Obligation
+	Notes       []Note // advisories about hooks; never blocking
 }
 
 // Status words used when rendering an obligation.
@@ -90,6 +92,12 @@ func (r Report) Findings() []state.Finding {
 			Severity: sev, Message: msg, State: state.StateOpen,
 		})
 	}
+	for _, n := range r.Notes {
+		out = append(out, state.Finding{
+			ID: n.ID, Source: state.SourceSetup, Rule: n.ID,
+			Severity: state.SeverityNote, Message: n.Message, State: state.StateOpen,
+		})
+	}
 	return out
 }
 
@@ -99,6 +107,9 @@ type auditor struct {
 	cfg config.Config
 	err error
 	obs []Obligation
+
+	tsDir string // TypeScript project directory relative to dir
+	notes []Note
 }
 
 // Run audits dir.
@@ -106,6 +117,7 @@ func Run(ctx context.Context, dir string, cfg config.Config) (Report, error) {
 	a := &auditor{ctx: ctx, dir: dir, cfg: cfg}
 	goP := a.exists("go.mod")
 	ts, tsP := tsProject(dir)
+	a.tsDir = ts
 	rep := Report{}
 	switch {
 	case goP && tsP:
@@ -125,7 +137,7 @@ func Run(ctx context.Context, dir string, cfg config.Config) (Report, error) {
 		a.tsFiles(ts)
 	}
 	a.add("ci", Recommended, a.noWorkflows(), "add a .github/workflows job that runs the same checks as the hooks (for example `prek run --all-files`)")
-	rep.Obligations = a.obs
+	rep.Obligations, rep.Notes = a.obs, a.notes
 	return rep, a.err
 }
 
@@ -228,6 +240,7 @@ func (a *auditor) hookObligations(goP, tsP bool) {
 		}
 		slices.Sort(ids)
 		ids = slices.Compact(ids)
+		a.ruleNotes(r, lvl, ms, goP, tsP)
 		o := Obligation{ID: r.id, Level: lvl, Waived: a.cfg.Waived(r.id), Satisfied: len(ms) > 0, Hook: strings.Join(ids, ", ")}
 		if !o.Satisfied {
 			o.Detail = fmt.Sprintf("no prek hook for %s at pre-commit or pre-push (accepted ids: %s)", r.id, strings.Join(r.names(), ", "))
@@ -235,6 +248,7 @@ func (a *auditor) hookObligations(goP, tsP bool) {
 		}
 		a.obs = append(a.obs, o)
 	}
+	a.toolNotes(hooks)
 	slices.Sort(early)
 	early = slices.Compact(early)
 	a.add("hook-tiers", Recommended, joinIf(len(early) > 0, "full-tier hooks run at pre-commit: ", early),

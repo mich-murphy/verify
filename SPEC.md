@@ -233,8 +233,8 @@ Go and TypeScript obligations are listed below; a mixed repository must satisfy 
 
 Each obligation is REQUIRED or RECOMMENDED. The audit learns which hooks exist, and at which
 stages, from `prek list --output-format json`, and reads tool config files (`.golangci.yml`,
-`go.mod`, `tsconfig*.json`, lockfiles). It runs nothing else, and it never reads Makefiles or
-package scripts.
+`go.mod`, `tsconfig*.json`, lockfiles). It runs nothing else, and it reads a Makefile only to
+resolve a `make <target>` hook entry, never package scripts.
 
 **Hook obligations** are met by a hook whose ID names the obligation, at the `pre-commit` or
 `pre-push` stage (`manual` does not count). An ID matches when it equals the standard ID or an
@@ -262,6 +262,12 @@ Verify does not inspect what a hook runs: no tool or registry can certify that a
 lints. The assurance is that a change to the prek config is a Sign-off change (§3), so a person
 approves what each hook runs, and `verify check` runs every hook. `verify setup` prints every hook that met
 each obligation, so a mislabelled or wrongly matched hook is visible.
+
+The audit does read each hook's filters and entry and reports non-blocking notes
+`setup:<hook-id>:<reason>` for four reasons: `scope` (its `files`/`types` filters cannot match the
+project's main language), `always-run` (a `pre-push` hook with `always_run: true`), `uncacheable` (a
+Go test or coverage entry that carries `-count=1` or `-shuffle`) and `tool-missing` (the entry's
+first word is not `make`, a shell builtin or on PATH). Hook fields are read from a YAML config only.
 
 **File obligations** are detected from the files themselves:
 

@@ -24,7 +24,7 @@ unrelated:
 `
 	for _, tc := range []struct{ name, text, target, want string }{
 		{"simple", mk, "test-hook", "go test -race ./..."},
-		{"deps, comments skipped, continuation joined", mk, "cover", "@echo start\ngo test -count=1  -shuffle=on ./..."},
+		{"deps, comments skipped, continuation joined", mk, "cover", "@echo start\ngo test -count=1 -shuffle=on ./..."},
 		{"grouped targets", mk, "b", "echo shared"},
 		{"last target", mk, "unrelated", "go test -count=1 ./..."},
 		{"missing target", mk, "nope", ""},
