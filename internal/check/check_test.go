@@ -1,6 +1,7 @@
 package check
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -890,16 +891,45 @@ func TestDifferentScopeIsNotReused(t *testing.T) {
 	}
 }
 
-func TestSameShaRecheckIsReused(t *testing.T) {
+func TestSameShaRecheckReturnsThePassedRecordUnchanged(t *testing.T) {
 	calls, _ := slowPrek(t)
 	repo := newRepo(t, head, true)
 	first, err := Run(t.Context(), repo, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	path := filepath.Join(repo.CommonDir, "verify", "runs", first.Record.SHA, "check.json")
+	before, err := os.ReadFile(path) // #nosec G304 -- test-owned state path
+	if err != nil {
+		t.Fatal(err)
+	}
 	again, err := Run(t.Context(), repo, Options{})
-	if err != nil || again.Record.SHA != first.Record.SHA || again.Record.ReusedFrom != first.Record.SHA || stageRuns(t, calls) != 2 {
+	if err != nil || again.Record.SHA != first.Record.SHA || again.Record.ReusedFrom != "" || stageRuns(t, calls) != 2 {
 		t.Fatalf("%+v %v, stage runs %d", again.Record, err, stageRuns(t, calls))
+	}
+	if !slices.Contains(again.Notes, "check already passed for this commit") {
+		t.Fatalf("notes %q", again.Notes)
+	}
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) { // #nosec G304 -- test-owned state path
+		t.Fatalf("record rewritten: %v\n%s\n%s", err, before, after)
+	}
+}
+
+func TestOldPassIsNotReused(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Record.Started, first.Record.Finished = time.Now().Add(-26*time.Hour), time.Now().Add(-25*time.Hour)
+	if err = state.Open(repo.CommonDir).SaveCheck(first.Record); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil || second.Record.ReusedFrom != "" || stageRuns(t, calls) != 4 {
+		t.Fatalf("%+v %v, stage runs %d", second.Record, err, stageRuns(t, calls))
 	}
 }
 
