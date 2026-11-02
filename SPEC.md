@@ -140,9 +140,9 @@ The lane is a pure function of the diff from the merge-base to the SHA, plus the
 
 | Lane | Applies when | Requires |
 |---|---|---|
-| Docs | Every changed path is `*.md`, under `docs/**`, or `CHANGELOG*`. | check |
+| Docs | Every changed path is `*.md`, under `docs/**`, or `CHANGELOG*`, and none is a source file, executable (mode 100755), symlink, submodule, build input or declared verify surface. | check |
 | Standard | Neither Docs nor Sign-off applies. | check, review, and verify if a surface changed |
-| Sign-off | The diff touches `verify.yaml`, prek or quality config (prek config, `.golangci*`, `tsconfig*`, linter, formatter and coverage configs, CI workflows), lock files with removed entries, or `signoff_paths`; or it changes more than 400 lines. | Standard's steps plus `verify decide approve` on that SHA |
+| Sign-off | The diff touches `verify.yaml`, prek or quality config (prek config, `.golangci*`, `tsconfig*`, linter, formatter and coverage configs, CI workflows), lock files with removed entries, or `signoff_paths`; or it changes more than 400 lines and is not Docs. | Standard's steps plus `verify decide approve` on that SHA |
 
 ## 4. Check
 

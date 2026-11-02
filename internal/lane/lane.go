@@ -99,7 +99,7 @@ func Compute(changes []Change, cfg config.Config, configFromCandidate bool) Resu
 	if configFromCandidate {
 		reasons = append(reasons, "verify.yaml absent or invalid at merge-base; candidate copy used")
 	}
-	if lines > config.SignoffLines {
+	if lines > config.SignoffLines && !allDocs {
 		reasons = append(reasons, "diff exceeds 400 changed lines")
 	}
 	switch {
