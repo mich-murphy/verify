@@ -629,6 +629,20 @@ func TestFailedHookIsOneFindingWithExcerptAndLog(t *testing.T) {
 	}
 }
 
+func TestDuplicateHookIDsEachGetAFinding(t *testing.T) {
+	twice := "lint a.....................................................................................Failed\n- hook id: lint\n- duration: 0.10s\n- exit code: 1\n\n  first.go:1: one\n" +
+		"lint b.....................................................................................Failed\n- hook id: lint\n- duration: 0.10s\n- exit code: 1\n\n  second.go:2: two\n"
+	stagePrek(t, map[string]stageSpec{"pre-commit": {out: twice, code: 1}})
+	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, second := finding(t, out.Record, "check:pre-commit:lint"), finding(t, out.Record, "check:pre-commit:lint#2")
+	if first.Excerpt != "first.go:1: one" || second.Excerpt != "second.go:2: two" {
+		t.Fatalf("excerpts %q and %q", first.Excerpt, second.Excerpt)
+	}
+}
+
 func TestPrekErrorKeepsStageFindingWithExcerpt(t *testing.T) {
 	stagePrek(t, map[string]stageSpec{"pre-commit": {out: "error: Failed to parse `.pre-commit-config.yaml`\n", code: 2}})
 	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
