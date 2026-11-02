@@ -149,9 +149,11 @@ func TestReviewerTimeoutSettlesDescendants(t *testing.T) {
 
 func TestSelect(t *testing.T) {
 	for _, tc := range []struct{ choice, author, want string }{
-		{"auto", "", "codex"},
-		{"", "claude", "codex"},
+		{"auto", "claude", "codex"},
 		{"auto", "codex", "claude"},
+		{"auto", "", "claude"},
+		{"auto", "gemini", "claude"},
+		{"", "claude", "codex"},
 		{"claude", "claude", "claude"},
 		{"codex", "codex", "codex"},
 	} {
