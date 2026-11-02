@@ -115,7 +115,7 @@ func TestCheckPassAndStatus(t *testing.T) {
 		t.Fatalf("worktree not kept for reuse: %v", err)
 	}
 	s, code := runCLI(t, "status")
-	if code != 0 || s.SHA != r.SHA || !strings.Contains(s.Message, "check:  pass") || s.NextAction != "run verify review" {
+	if code != ExitBlocked || s.SHA != r.SHA || !strings.Contains(s.Message, "check:  pass") || s.NextAction != "run verify review" {
 		t.Fatalf("code=%d %+v", code, s)
 	}
 }
@@ -236,6 +236,7 @@ func TestUsage(t *testing.T) {
 func TestDecideReasonValueIsNotHelp(t *testing.T) {
 	repo := setup(t, "fake")
 	commit(t, repo, "README.md", "changed\n")
+	runCLI(t, "check")
 	r, code := runCLI(t, "decide", "approve", "--reason", "--help")
 	if code != ExitOK || r.Status != "ok" {
 		t.Fatalf("reason was interpreted as help: code %d result %+v", code, r)
@@ -280,7 +281,7 @@ func TestTextOutputAndNotRepo(t *testing.T) {
 		t.Fatalf("code %d %q", code, out.String())
 	}
 	out.Reset()
-	if Run([]string{"status"}, nil, &out, &errb) != 0 || !strings.Contains(out.String(), "review budget") {
+	if Run([]string{"status"}, nil, &out, &errb) != ExitFindings || !strings.Contains(out.String(), "review budget") {
 		t.Fatalf("%q", out.String())
 	}
 	t.Chdir(t.TempDir())

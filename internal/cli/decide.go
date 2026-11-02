@@ -58,14 +58,25 @@ func runDecide(env *Env) int {
 	if v.branch == "" {
 		return env.Fail("decide", ExitBlocked, "HEAD is detached; decisions are recorded per branch", "check out a branch")
 	}
-	if kind != state.DecideApprove && v.recs.chk == nil {
-		return env.Fail("decide", ExitBlocked, "no check record for HEAD", "run verify check")
+	if v.recs.chk == nil {
+		msg := "no check record for HEAD"
+		if kind == state.DecideApprove {
+			msg = "run verify check first"
+		}
+		return env.Fail("decide", ExitBlocked, msg, "run verify check")
 	}
 	target, msg := normaliseTarget(v, kind, target)
 	if msg != "" {
 		return env.Fail("decide", ExitUsage, msg, "run verify status to see finding IDs")
 	}
-	err := recordDecision(v, kind, target, *reason)
+	var cov *state.DecisionCoverage
+	if kind == state.DecideApprove {
+		var err error
+		if cov, err = approveCoverage(env, v); err != nil {
+			return env.Fail("decide", ExitBlocked, err.Error(), "resolve the git error")
+		}
+	}
+	err := recordDecision(v, kind, target, *reason, cov)
 	if err != nil {
 		return env.Fail("decide", ExitBlocked, err.Error(), "resolve the state error and retry")
 	}
@@ -76,9 +87,29 @@ func runDecide(env *Env) int {
 	}, ExitOK)
 }
 
-func recordDecision(v *view, kind, target, reason string) error {
+// approveCoverage records the range an approval covers: from the last reviewed
+// commit when it is an ancestor of HEAD, else from the merge-base.
+func approveCoverage(env *Env, v *view) (*state.DecisionCoverage, error) {
+	from := v.loaded.MergeBase
+	if last := v.recs.br.LastReviewedSHA; last != "" {
+		if ok, err := v.repo.IsAncestor(env.Ctx, last, v.sha); err == nil && ok {
+			from = last
+		}
+	}
+	changes, err := v.repo.Changes(env.Ctx, from, v.sha)
+	if err != nil {
+		return nil, err
+	}
+	cov := &state.DecisionCoverage{From: from, To: v.sha, Files: len(changes), Check: v.recs.chk.SHA}
+	for _, c := range changes {
+		cov.Lines += c.Added + c.Deleted
+	}
+	return cov, nil
+}
+
+func recordDecision(v *view, kind, target, reason string, cov *state.DecisionCoverage) error {
 	return v.store.UpdateBranch(v.branch, func(b *state.Branch) error {
-		b.Decisions = append(b.Decisions, state.Decision{Kind: kind, Target: target, Reason: strings.TrimSpace(reason), SHA: v.sha, Time: time.Now().UTC()})
+		b.Decisions = append(b.Decisions, state.Decision{Kind: kind, Target: target, Reason: strings.TrimSpace(reason), SHA: v.sha, Time: time.Now().UTC(), Coverage: cov})
 		if kind == state.DecideAccept {
 			acceptBranchFinding(b, v.recs.rev, target)
 		}

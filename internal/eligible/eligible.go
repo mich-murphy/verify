@@ -337,6 +337,9 @@ func EffectiveFindings(chk *state.CheckRecord, rev *state.ReviewRecord, ver *sta
 	for i, f := range out {
 		if f.State == state.StateOpen && decisionCovers(f, br.Decisions, sha) {
 			out[i].State = state.StateAccepted
+			if f.Source == state.SourceSetup {
+				out[i].State = state.StateWaived
+			}
 		}
 	}
 	return out

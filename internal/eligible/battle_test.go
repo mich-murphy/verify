@@ -94,13 +94,16 @@ func TestBattleEffectiveFindingsDecisionScopeAndImmutability(t *testing.T) {
 	for _, source := range []string{state.SourceGuard, state.SourceSetup, state.SourceCheck} {
 		f := blk("finding", source)
 		raw := &state.CheckRecord{Findings: []state.Finding{f}}
-		kind := state.DecideAccept
+		kind, covered := state.DecideAccept, state.StateAccepted
 		if source == state.SourceSetup {
-			kind = state.DecideWaive
+			kind, covered = state.DecideWaive, state.StateWaived
+		}
+		if source == state.SourceCheck {
+			covered = state.StateOpen
 		}
 		br := &state.Branch{Decisions: []state.Decision{dec(kind, f.ID)}}
 		got := EffectiveFindings(raw, nil, nil, br, sha)
-		if (got[0].State == state.StateAccepted) != (source != state.SourceCheck) {
+		if got[0].State != covered {
 			t.Fatalf("source %s: %+v", source, got)
 		}
 		if raw.Findings[0].State != state.StateOpen {

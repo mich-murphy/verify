@@ -55,6 +55,8 @@ Every command accepts `--json` and prints one `verify.result/1` object. Exit cod
 | `2` | Usage or configuration error. |
 | `3` | Blocked. Covers a missing prerequisite, a stale SHA, a parked branch, or an unavailable tool or reviewer. |
 
+`verify status` exits `0` when HEAD is eligible, `1` when its status is `blocked-by-findings`, and `3` for every other not-eligible state (missing check or review, parked without a decision, stale evidence).
+
 Every non-zero result carries `next_action`.
 
 ## 3. Configuration and state
@@ -132,7 +134,12 @@ admission requires the current lane. Stale evidence cannot qualify the current c
 decisions change the effective assessment, not the recorded execution result. Status, review
 admission and shipping apply that decision-aware assessment. The PR body preserves raw execution
 results while showing effective finding dispositions and human decisions. A failed repository
-command cannot be made passing by accepting a finding.
+command cannot be made passing by accepting a finding. `verify status` shows a finding covered by
+`decide accept` as `accepted` and a setup obligation covered by `decide waive` as `waived`.
+`verify decide approve` exits 3 with "run verify check first" when HEAD has no current check record,
+and records `coverage` on the decision: `from` (the last reviewed SHA, or the merge-base when nothing
+was reviewed), `to` (the approved SHA), the `files` and `lines` changed between them, and `check` (the
+SHA of the check record it relies on).
 
 ### Lanes
 
