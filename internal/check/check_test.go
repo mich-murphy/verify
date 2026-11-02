@@ -1,6 +1,7 @@
 package check
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -193,7 +194,7 @@ func argLogPrek(t *testing.T) string {
 	bin := t.TempDir()
 	logf := filepath.Join(t.TempDir(), "args.log")
 	t.Setenv("PREK_ARGS_LOG", logf)
-	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\necho \"$*\" >> \"$PREK_ARGS_LOG\"\nexit 0\n"
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.0.0'; exit 0; fi\necho \"$*\" >> \"$PREK_ARGS_LOG\"\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
 		t.Fatal(err)
 	}
@@ -777,5 +778,210 @@ func TestRealPrekFailureAndFixer(t *testing.T) {
 	}
 	if h := out.Record.Steps[0].Hooks; len(h) != 2 || h[0].ID != "lint" || h[0].Status != state.HookFail || h[1].Status != state.HookModified {
 		t.Fatalf("%+v", h)
+	}
+}
+
+// slowPrek logs each stage run (not list or version calls) to the returned file.
+// While the returned flag file exists, every stage fails.
+func slowPrek(t *testing.T) (calls, failFlag string) {
+	t.Helper()
+	calls = filepath.Join(t.TempDir(), "calls.log")
+	failFlag = filepath.Join(t.TempDir(), "fail")
+	t.Setenv("PREK_CALLS_LOG", calls)
+	t.Setenv("PREK_FAIL_FLAG", failFlag)
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.5.5'; exit 0; fi\necho \"$*\" >> \"$PREK_CALLS_LOG\"\n[ -f \"$PREK_FAIL_FLAG\" ] && exit 1\nexit 0\n"
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return calls, failFlag
+}
+
+func stageRuns(t *testing.T, calls string) int {
+	t.Helper()
+	b, err := os.ReadFile(calls) // #nosec G304 -- test-owned temp path
+	if err != nil {
+		return 0
+	}
+	return strings.Count(string(b), "\n")
+}
+
+func TestIdenticalTreeReusesPassingCheck(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil || first.Record.Status != "pass" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := second.Record
+	if r.SHA == first.Record.SHA || r.ReusedFrom != first.Record.SHA || r.Status != "pass" || r.Tree != first.Record.Tree {
+		t.Fatalf("%+v", r)
+	}
+	if !slices.Contains(second.Notes, "reused check from "+first.Record.SHA+" (identical tree)") {
+		t.Fatalf("notes %q", second.Notes)
+	}
+	if n := stageRuns(t, calls); n != 2 {
+		t.Fatalf("prek ran %d stages, want 2 (pre-commit and pre-push once)", n)
+	}
+	saved, err := state.Open(repo.CommonDir).LoadCheck(r.SHA)
+	if err != nil || saved.ReusedFrom != first.Record.SHA {
+		t.Fatalf("%+v %v", saved, err)
+	}
+	idx, err := os.ReadFile(filepath.Join(repo.CommonDir, "verify", "trees", r.Tree+".json")) // #nosec G304 -- test-owned state path
+	if err != nil || !strings.Contains(string(idx), `"schema": "verify.tree/1"`) || !strings.Contains(string(idx), `"sha": "`+r.SHA+`"`) {
+		t.Fatalf("tree index %s %v", idx, err)
+	}
+}
+
+func TestDifferentTreeIsNotReused(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	if _, err := Run(t.Context(), repo, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	put(t, repo.Root, "b.go", "package a\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-qm", "new tree")
+	out, err := Run(t.Context(), repo, Options{})
+	if err != nil || out.Record.ReusedFrom != "" || stageRuns(t, calls) != 4 {
+		t.Fatalf("%+v %v, stage runs %d", out.Record, err, stageRuns(t, calls))
+	}
+}
+
+func TestFailedCheckIsNotReused(t *testing.T) {
+	calls, failFlag := slowPrek(t)
+	repo := newRepo(t, head, true)
+	put(t, filepath.Dir(failFlag), "fail", "")
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil || first.Record.Status != "fail" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	if err = os.Remove(failFlag); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil || second.Record.ReusedFrom != "" || second.Record.Status != "pass" || stageRuns(t, calls) != 3 {
+		t.Fatalf("%+v %v, stage runs %d", second.Record, err, stageRuns(t, calls))
+	}
+}
+
+func TestDifferentScopeIsNotReused(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := state.Open(repo.CommonDir)
+	first.Record.Scope, first.Record.ScopeReason = ScopeFull, "recorded under another scope"
+	if err = store.SaveCheck(first.Record); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil || second.Record.ReusedFrom != "" || second.Record.Scope != ScopeAffected || stageRuns(t, calls) != 4 {
+		t.Fatalf("%+v %v, stage runs %d", second.Record, err, stageRuns(t, calls))
+	}
+}
+
+func TestSameShaRecheckReturnsThePassedRecordUnchanged(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(repo.CommonDir, "verify", "runs", first.Record.SHA, "check.json")
+	before, err := os.ReadFile(path) // #nosec G304 -- test-owned state path
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := Run(t.Context(), repo, Options{})
+	if err != nil || again.Record.SHA != first.Record.SHA || again.Record.ReusedFrom != "" || stageRuns(t, calls) != 2 {
+		t.Fatalf("%+v %v, stage runs %d", again.Record, err, stageRuns(t, calls))
+	}
+	if !slices.Contains(again.Notes, "check already passed for this commit") {
+		t.Fatalf("notes %q", again.Notes)
+	}
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) { // #nosec G304 -- test-owned state path
+		t.Fatalf("record rewritten: %v\n%s\n%s", err, before, after)
+	}
+}
+
+func TestSameShaRecheckOfAReusedRecordSaysAlreadyPassed(t *testing.T) {
+	slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	reused, err := Run(t.Context(), repo, Options{})
+	if err != nil || reused.Record.ReusedFrom != first.Record.SHA {
+		t.Fatalf("%+v %v", reused.Record, err)
+	}
+	path := filepath.Join(repo.CommonDir, "verify", "runs", reused.Record.SHA, "check.json")
+	before, err := os.ReadFile(path) // #nosec G304 -- test-owned state path
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := Run(t.Context(), repo, Options{})
+	if err != nil || again.Record.SHA != reused.Record.SHA || again.Record.ReusedFrom != first.Record.SHA {
+		t.Fatalf("%+v %v", again.Record, err)
+	}
+	if !slices.Contains(again.Notes, "check already passed for this commit") || slices.ContainsFunc(again.Notes, func(n string) bool { return strings.HasPrefix(n, "reused check from") }) {
+		t.Fatalf("notes %q", again.Notes)
+	}
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) { // #nosec G304 -- test-owned state path
+		t.Fatalf("record rewritten: %v\n%s\n%s", err, before, after)
+	}
+}
+
+func TestOldPassIsNotReused(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Record.Started, first.Record.Finished = time.Now().Add(-26*time.Hour), time.Now().Add(-25*time.Hour)
+	if err = state.Open(repo.CommonDir).SaveCheck(first.Record); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil || second.Record.ReusedFrom != "" || stageRuns(t, calls) != 4 {
+		t.Fatalf("%+v %v, stage runs %d", second.Record, err, stageRuns(t, calls))
+	}
+}
+
+func TestReuseStillRunsGuardsOnTheNewHistory(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	if first, err := Run(t.Context(), repo, Options{}); err != nil || first.Record.Status != "pass" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	git(t, repo.Root, "checkout", "-q", "-b", "leaky", "main")
+	put(t, repo.Root, "a.go", "package a\n\n// token = "+"gh"+"p_"+"aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5\n")
+	git(t, repo.Root, "commit", "-qam", "add a token")
+	put(t, repo.Root, "a.go", "package a\n\nvar X = 1\n")
+	git(t, repo.Root, "commit", "-qam", "remove it again")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := second.Record
+	if r.Status != "fail" || !slices.ContainsFunc(r.Findings, func(f state.Finding) bool { return strings.HasPrefix(f.ID, "guard:secrets") }) {
+		t.Fatalf("status %s, findings %+v", r.Status, r.Findings)
+	}
+	if n := stageRuns(t, calls); n != 2 {
+		t.Fatalf("prek ran %d stages, want only the first branch's 2", n)
 	}
 }

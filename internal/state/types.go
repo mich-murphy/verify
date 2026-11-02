@@ -8,6 +8,7 @@ const (
 	SchemaCheck  = "verify.check/1"
 	SchemaReview = "verify.review/1"
 	SchemaVerify = "verify.verify/1"
+	SchemaTree   = "verify.tree/1"
 )
 
 // Finding sources, severities and states.
@@ -141,9 +142,18 @@ type CheckRecord struct {
 	Steps         []Step    `json:"steps"`
 	Findings      []Finding `json:"findings"`
 	ConfigFromCan bool      `json:"config_from_candidate,omitempty"`
+	Tree          string    `json:"tree"`
+	PrekVersion   string    `json:"prek_version"`
+	ReusedFrom    string    `json:"reused_from,omitempty"`
 	Attempt       int       `json:"attempt"`
 	Started       time.Time `json:"started"`
 	Finished      time.Time `json:"finished"`
+}
+
+// TreeIndex is verify.tree/1: trees/<tree>.json names the latest sha whose check on that tree passed.
+type TreeIndex struct {
+	Schema string `json:"schema"`
+	SHA    string `json:"sha"`
 }
 
 // ReviewRecord is verify.review/1.

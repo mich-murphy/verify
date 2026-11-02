@@ -196,7 +196,32 @@ func (s *Store) SaveCheck(r *CheckRecord) error {
 	if err := validateCheck(r); err != nil {
 		return err
 	}
-	return s.locked(func() error { return writeJSON(filepath.Join(d, "check.json"), r) })
+	return s.locked(func() error {
+		if err := writeJSON(filepath.Join(d, "check.json"), r); err != nil {
+			return err
+		}
+		if r.Status != "pass" || r.Tree == "" {
+			return nil
+		}
+		return writeJSON(s.treePath(r.Tree), TreeIndex{Schema: SchemaTree, SHA: r.SHA})
+	})
+}
+
+func (s *Store) treePath(tree string) string { return filepath.Join(s.Dir, "trees", tree+".json") }
+
+// LoadTree returns the sha of the latest passing check on tree.
+func (s *Store) LoadTree(tree string) (string, error) {
+	if !shaPattern.MatchString(tree) {
+		return "", fmt.Errorf("invalid tree %q", tree)
+	}
+	var idx TreeIndex
+	if err := readJSON(s.treePath(tree), SchemaTree, &idx, func() string { return idx.Schema }); err != nil {
+		return "", err
+	}
+	if !validSHA(idx.SHA) {
+		return "", fmt.Errorf("%w: tree index %s names an invalid sha", ErrCorrupt, tree)
+	}
+	return idx.SHA, nil
 }
 
 // LoadCheck reads the check record for sha.

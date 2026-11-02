@@ -23,6 +23,9 @@ import (
 
 const prekTimeout = 30 * time.Minute
 
+// reuseMaxAge bounds how old a passing check may be and still stand in for a new one.
+const reuseMaxAge = 24 * time.Hour
+
 // fastTierBudget is the SPEC §4.5 pre-commit budget; a variable so tests can lower it.
 var fastTierBudget = 5 * time.Second
 
@@ -133,6 +136,10 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 		return out, nil
 	}
 
+	if reused, err := rc.reuse(ctx, out); err != nil || reused {
+		return out, err
+	}
+
 	blocked, err := rc.guardsBlock(ctx, gf)
 	if err != nil {
 		return nil, err
@@ -188,6 +195,71 @@ func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error
 		return nil, err
 	}
 	return out, nil
+}
+
+// reuse swaps out for a record built from an earlier passing one on the same tree,
+// if any. Guards have already run on this history, so their findings stay.
+func (rc *runCtx) reuse(ctx context.Context, out *Outcome) (bool, error) {
+	var err error
+	if rc.rec.Tree, err = rc.repo.Tree(ctx, rc.rec.SHA); err != nil {
+		return false, err
+	}
+	rc.rec.PrekVersion = rc.prekVersion(ctx)
+	prior, sameCommit, ok := rc.reusable()
+	if ok {
+		out.Record = prior
+		if sameCommit {
+			out.Notes = append(out.Notes, "check already passed for this commit")
+		} else {
+			out.Notes = append(out.Notes, "reused check from "+prior.ReusedFrom+" (identical tree)")
+		}
+	}
+	return ok, nil
+}
+
+// prekVersion is prek's own version line, or empty when prek cannot report one.
+func (rc *runCtx) prekVersion(ctx context.Context) string {
+	r, err := rc.run.Run(ctx, runner.Command{Args: []string{"prek", "--version"}, Dir: rc.repo.Root, Timeout: 10 * time.Second})
+	if err != nil || r.Status != runner.Pass {
+		return ""
+	}
+	return strings.TrimSpace(r.Stdout.Output)
+}
+
+// reusable builds the record for rc.rec from an earlier passing check that
+// covered the same tree under the same merge base, lane, scope and prek version.
+// It keeps this run's guard findings and takes the earlier steps and other
+// findings, then recomputes the status. sameCommit reports that the earlier
+// check was of this very commit, so its record is returned unchanged.
+func (rc *runCtx) reusable() (rec *state.CheckRecord, sameCommit, ok bool) {
+	cur := rc.rec
+	sha, err := rc.store.LoadTree(cur.Tree)
+	if err != nil {
+		return nil, false, false
+	}
+	old, err := rc.store.LoadCheck(sha)
+	if err != nil || old.Status != "pass" || old.Tree != cur.Tree || old.MergeBase != cur.MergeBase ||
+		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion ||
+		time.Since(old.Finished) > reuseMaxAge {
+		return nil, false, false
+	}
+	if old.SHA == cur.SHA {
+		return old, true, true
+	}
+	reused := *cur
+	// Started and Finished stay the earlier run's, so a reuse never makes the evidence look younger.
+	reused.ReusedFrom, reused.Steps, reused.Attempt = old.SHA, old.Steps, old.Attempt
+	reused.Started, reused.Finished = old.Started, old.Finished
+	for _, f := range old.Findings {
+		if f.Source != state.SourceGuard {
+			reused.Findings = append(reused.Findings, f)
+		}
+	}
+	reused.Status = status(&reused)
+	if err = rc.store.SaveCheck(&reused); err != nil {
+		return nil, false, false
+	}
+	return &reused, false, true
 }
 
 func validateFastRef(ctx context.Context, repo *gitx.Repo, sha string, fast bool) error {
