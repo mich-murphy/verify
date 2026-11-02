@@ -13,7 +13,7 @@ func TestBattleConcurrentBranchUpdatesPreserveAllFindings(t *testing.T) {
 	errs := make(chan error, workers)
 	for worker := range workers {
 		wg.Go(func() {
-			errs <- st.UpdateBranch("feature", func(b *Branch) error {
+			errs <- st.UpdateBranch(t.Context(), "feature", func(b *Branch) error {
 				// Findings are append-only identity history, just as decisions are. Use
 				// notes here so this exercises locking independently of budget policy.
 				b.Findings = append(b.Findings, Finding{ID: fmt.Sprintf("F%d", worker+1), Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "claim"})

@@ -145,14 +145,14 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 		return nil, err
 	}
 	if blocked {
-		return rc.shortCircuit(cfg, out)
+		return rc.shortCircuit(ctx, cfg, out)
 	}
 	if err := rc.inWorktree(ctx, sha, cfg); err != nil {
 		return nil, err
 	}
 	rec.Finished = time.Now().UTC()
 	rec.Status = status(rec)
-	if err := rc.store.SaveCheck(rec); err != nil {
+	if err := rc.store.SaveCheck(ctx, rec); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -180,7 +180,7 @@ func (rc *runCtx) guardsBlock(ctx context.Context, gf []state.Finding) (bool, er
 
 // shortCircuit records every planned step as skipped and returns without
 // entering the worktree. The plan comes from the checkout, not the exact SHA.
-func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error) {
+func (rc *runCtx) shortCircuit(ctx context.Context, cfg config.Config, out *Outcome) (*Outcome, error) {
 	steps, err := plan(rc.repo.Root, cfg)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (rc *runCtx) shortCircuit(cfg config.Config, out *Outcome) (*Outcome, error
 	out.Notes = append(out.Notes, "guards blocked; hooks skipped")
 	rc.rec.Finished = time.Now().UTC()
 	rc.rec.Status = status(rc.rec)
-	if err := rc.store.SaveCheck(rc.rec); err != nil {
+	if err := rc.store.SaveCheck(ctx, rc.rec); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -205,7 +205,7 @@ func (rc *runCtx) reuse(ctx context.Context, out *Outcome) (bool, error) {
 		return false, err
 	}
 	rc.rec.PrekVersion = rc.prekVersion(ctx)
-	prior, sameCommit, ok := rc.reusable()
+	prior, sameCommit, ok := rc.reusable(ctx)
 	if ok {
 		out.Record = prior
 		if sameCommit {
@@ -231,7 +231,7 @@ func (rc *runCtx) prekVersion(ctx context.Context) string {
 // It keeps this run's guard findings and takes the earlier steps and other
 // findings, then recomputes the status. sameCommit reports that the earlier
 // check was of this very commit, so its record is returned unchanged.
-func (rc *runCtx) reusable() (rec *state.CheckRecord, sameCommit, ok bool) {
+func (rc *runCtx) reusable(ctx context.Context) (rec *state.CheckRecord, sameCommit, ok bool) {
 	cur := rc.rec
 	sha, err := rc.store.LoadTree(cur.Tree)
 	if err != nil {
@@ -256,7 +256,7 @@ func (rc *runCtx) reusable() (rec *state.CheckRecord, sameCommit, ok bool) {
 		}
 	}
 	reused.Status = status(&reused)
-	if err = rc.store.SaveCheck(&reused); err != nil {
+	if err = rc.store.SaveCheck(ctx, &reused); err != nil {
 		return nil, false, false
 	}
 	return &reused, false, true
@@ -293,7 +293,7 @@ func (rc *runCtx) runFast(ctx context.Context, out *Outcome) error {
 
 func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config) (runErr error) {
 	dir := rc.store.WorktreesDir()
-	unlock, err := state.LockFile(filepath.Join(dir, "check.lock"))
+	unlock, err := state.LockFile(ctx, filepath.Join(dir, "check.lock"))
 	if err != nil {
 		return fmt.Errorf("lock worktree: %w", err)
 	}

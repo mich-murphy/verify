@@ -531,7 +531,7 @@ func TestAcceptedGuardFindingLetsHooksRun(t *testing.T) {
 			id = f.ID
 		}
 	}
-	err = state.Open(repo.CommonDir).UpdateBranch("feature", func(b *state.Branch) error {
+	err = state.Open(repo.CommonDir).UpdateBranch(t.Context(), "feature", func(b *state.Branch) error {
 		b.Decisions = append(b.Decisions, state.Decision{Kind: state.DecideAccept, Target: id, Reason: "fixture", SHA: first.Record.SHA, Time: time.Now().UTC()})
 		return nil
 	})
@@ -881,7 +881,7 @@ func TestDifferentScopeIsNotReused(t *testing.T) {
 	}
 	store := state.Open(repo.CommonDir)
 	first.Record.Scope, first.Record.ScopeReason = ScopeFull, "recorded under another scope"
-	if err = store.SaveCheck(first.Record); err != nil {
+	if err = store.SaveCheck(t.Context(), first.Record); err != nil {
 		t.Fatal(err)
 	}
 	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
@@ -952,7 +952,7 @@ func TestOldPassIsNotReused(t *testing.T) {
 		t.Fatal(err)
 	}
 	first.Record.Started, first.Record.Finished = time.Now().Add(-26*time.Hour), time.Now().Add(-25*time.Hour)
-	if err = state.Open(repo.CommonDir).SaveCheck(first.Record); err != nil {
+	if err = state.Open(repo.CommonDir).SaveCheck(t.Context(), first.Record); err != nil {
 		t.Fatal(err)
 	}
 	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")

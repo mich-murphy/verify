@@ -27,7 +27,7 @@ func TestProductNamespace(t *testing.T) {
 		}
 	}
 	legacy := &Store{Dir: filepath.Join(commonDir, "gate")}
-	if err := legacy.UpdateBranch("feature", func(b *Branch) error {
+	if err := legacy.UpdateBranch(t.Context(), "feature", func(b *Branch) error {
 		b.Parked = true
 		return nil
 	}); err != nil {
@@ -46,7 +46,7 @@ func TestCheckRoundTripAndFailClosed(t *testing.T) {
 	s := Open(t.TempDir())
 	now := time.Now().UTC()
 	rec := &CheckRecord{SHA: sha, MergeBase: sha, Lane: "standard", Scope: "affected", Status: "pass", Started: now, Finished: now, Steps: []Step{{Name: "a", Status: StatusPass}}}
-	if err := s.SaveCheck(rec); err != nil {
+	if err := s.SaveCheck(t.Context(), rec); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.LoadCheck(sha)
@@ -82,10 +82,10 @@ func TestCheckRoundTripAndFailClosed(t *testing.T) {
 
 func TestReviewVerifyRoundTrip(t *testing.T) {
 	s := Open(t.TempDir())
-	if err := s.SaveReview(&ReviewRecord{SHA: sha, MergeBase: sha, Branch: "feature", Reviewer: "codex", Status: "pass", CallsUsed: 1, Attempts: 1, Finished: time.Now().UTC()}); err != nil {
+	if err := s.SaveReview(t.Context(), &ReviewRecord{SHA: sha, MergeBase: sha, Branch: "feature", Reviewer: "codex", Status: "pass", CallsUsed: 1, Attempts: 1, Finished: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveVerify(&VerifyRecord{SHA: sha, MergeBase: sha, Verdict: "go", Scenarios: []ScenarioResult{{Name: "help", Status: StatusPass}}, Steps: []Step{{Name: "verify-scenario-help", Status: StatusPass}}, Finished: time.Now().UTC()}); err != nil {
+	if err := s.SaveVerify(t.Context(), &VerifyRecord{SHA: sha, MergeBase: sha, Verdict: "go", Scenarios: []ScenarioResult{{Name: "help", Status: StatusPass}}, Steps: []Step{{Name: "verify-scenario-help", Status: StatusPass}}, Finished: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	if r, err := s.LoadReview(sha); err != nil || r.Schema != SchemaReview {
@@ -102,11 +102,11 @@ func TestReviewAttemptValidation(t *testing.T) {
 	for _, n := range []int{0, 3} {
 		r := good
 		r.Attempts = n
-		if err := s.SaveReview(&r); !errors.Is(err, ErrCorrupt) {
+		if err := s.SaveReview(t.Context(), &r); !errors.Is(err, ErrCorrupt) {
 			t.Fatalf("invalid attempt count %d: %v", n, err)
 		}
 	}
-	if err := s.UpdateBranch("feature", func(b *Branch) error { b.ReviewCalls = 1; return nil }); !errors.Is(err, ErrCorrupt) {
+	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.ReviewCalls = 1; return nil }); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("branch with fewer attempts than reviews: %v", err)
 	}
 }
@@ -120,7 +120,7 @@ func TestBranch(t *testing.T) {
 	if b.NextFindingID() != "F1" {
 		t.Fatal(b.NextFindingID())
 	}
-	err = s.UpdateBranch("feat/x", func(b *Branch) error {
+	err = s.UpdateBranch(t.Context(), "feat/x", func(b *Branch) error {
 		b.ReviewCalls++
 		b.ReviewAttempts++
 		b.Findings = append(b.Findings, Finding{ID: "F1", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "one"}, Finding{ID: "F7", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "seven"})
@@ -159,12 +159,12 @@ func TestSemanticValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := good
 			tc.mutate(&r)
-			if err := s.SaveCheck(&r); !errors.Is(err, ErrCorrupt) {
+			if err := s.SaveCheck(t.Context(), &r); !errors.Is(err, ErrCorrupt) {
 				t.Fatalf("wanted corrupt: %v", err)
 			}
 		})
 	}
-	if err := s.SaveCheck(&good); err != nil {
+	if err := s.SaveCheck(t.Context(), &good); err != nil {
 		t.Fatal(err)
 	}
 	d, _ := s.RunDir(sha)
@@ -185,7 +185,7 @@ func TestSemanticValidation(t *testing.T) {
 func TestVerifyCoherence(t *testing.T) {
 	s := Open(t.TempDir())
 	good := VerifyRecord{SHA: sha, MergeBase: sha, Verdict: "go", Finished: time.Now().UTC(), Scenarios: []ScenarioResult{{Name: "help", Status: StatusPass, ExitCode: 2}}, Steps: []Step{{Name: "verify-scenario-help", Status: StatusFail, ExitCode: 2}}}
-	if err := s.SaveVerify(&good); err != nil {
+	if err := s.SaveVerify(t.Context(), &good); err != nil {
 		t.Fatalf("expected nonzero scenario is valid: %v", err)
 	}
 	for _, tc := range []struct {
@@ -219,7 +219,7 @@ func TestVerifyCoherence(t *testing.T) {
 			v.Steps = append([]Step(nil), good.Steps...)
 			v.Scenarios = append([]ScenarioResult(nil), good.Scenarios...)
 			tc.mutate(&v)
-			if err := s.SaveVerify(&v); !errors.Is(err, ErrCorrupt) {
+			if err := s.SaveVerify(t.Context(), &v); !errors.Is(err, ErrCorrupt) {
 				t.Fatalf("wanted corrupt: %v", err)
 			}
 		})
@@ -231,7 +231,7 @@ func TestBranchIdentityAndInjectivity(t *testing.T) {
 	if s.BranchPath("feat/x") == s.BranchPath("feat%2Fx") {
 		t.Fatal("branch filenames collide")
 	}
-	if err := s.UpdateBranch("feat/x", func(*Branch) error { return nil }); err != nil {
+	if err := s.UpdateBranch(t.Context(), "feat/x", func(*Branch) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
 	p := s.BranchPath("feat/x")
@@ -295,12 +295,12 @@ func TestWriteAtomicNoTempLeft(t *testing.T) {
 
 func TestLockExclusive(t *testing.T) {
 	s := Open(t.TempDir())
-	u, err := s.Lock()
+	u, err := s.Lock(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	u()
-	u2, err := s.Lock()
+	u2, err := s.Lock(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

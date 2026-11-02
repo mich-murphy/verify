@@ -23,7 +23,7 @@ func TestStatusExitCodes(t *testing.T) {
 	if r, code = runCLI(t, "status"); code != ExitOK || r.NextAction != "run verify ship" {
 		t.Fatalf("eligible: code %d %+v", code, r)
 	}
-	if err := e.st.UpdateBranch("feature", func(b *state.Branch) error {
+	if err := e.st.UpdateBranch(t.Context(), "feature", func(b *state.Branch) error {
 		b.Findings = append(b.Findings, state.Finding{ID: "F1", Source: "review", Severity: "block", State: "open", Message: "bug"})
 		return nil
 	}); err != nil {
@@ -38,7 +38,7 @@ func TestStatusShowsWaivedAndAccepted(t *testing.T) {
 	e := newShipEnv(t)
 	base := strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "main"))
 	now := time.Now().UTC()
-	if err := e.st.SaveCheck(&state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: "standard", Scope: "affected", Status: "fail", Started: now, Finished: now, Findings: []state.Finding{
+	if err := e.st.SaveCheck(t.Context(), &state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: "standard", Scope: "affected", Status: "fail", Started: now, Finished: now, Findings: []state.Finding{
 		{ID: "setup:x", Source: "setup", Severity: "block", State: "open", Message: "missing setup"},
 		{ID: "guard:g", Source: "guard", Severity: "block", State: "open", Message: "guard hit"},
 	}}); err != nil {
@@ -75,7 +75,7 @@ func TestDecideApproveRecordsCoverage(t *testing.T) {
 	first := e.sha
 	commit(t, e.repo, "b.go", "package b\n\nvar B = 1\nvar C = 2\n")
 	e.sha = strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "HEAD"))
-	if err := e.st.UpdateBranch("feature", func(b *state.Branch) error { b.LastReviewedSHA = first; return nil }); err != nil {
+	if err := e.st.UpdateBranch(t.Context(), "feature", func(b *state.Branch) error { b.LastReviewedSHA = first; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	e.records(t, "standard", true)

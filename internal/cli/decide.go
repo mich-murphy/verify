@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"strings"
 	"time"
@@ -76,7 +77,7 @@ func runDecide(env *Env) int {
 			return env.Fail("decide", ExitBlocked, err.Error(), "resolve the git error")
 		}
 	}
-	err := recordDecision(v, kind, target, *reason, cov)
+	err := recordDecision(env.Ctx, v, kind, target, *reason, cov)
 	if err != nil {
 		return env.Fail("decide", ExitBlocked, err.Error(), "resolve the state error and retry")
 	}
@@ -107,8 +108,8 @@ func approveCoverage(env *Env, v *view) (*state.DecisionCoverage, error) {
 	return cov, nil
 }
 
-func recordDecision(v *view, kind, target, reason string, cov *state.DecisionCoverage) error {
-	return v.store.UpdateBranch(v.branch, func(b *state.Branch) error {
+func recordDecision(ctx context.Context, v *view, kind, target, reason string, cov *state.DecisionCoverage) error {
+	return v.store.UpdateBranch(ctx, v.branch, func(b *state.Branch) error {
 		b.Decisions = append(b.Decisions, state.Decision{Kind: kind, Target: target, Reason: strings.TrimSpace(reason), SHA: v.sha, Time: time.Now().UTC(), Coverage: cov})
 		if kind == state.DecideAccept {
 			acceptBranchFinding(b, v.recs.rev, target)

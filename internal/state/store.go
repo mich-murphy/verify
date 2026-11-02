@@ -4,6 +4,7 @@ package state
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,11 +96,13 @@ func (s *Store) BranchPath(branch string) string {
 }
 
 // Lock takes the exclusive store lock and returns the unlock function.
-func (s *Store) Lock() (func(), error) { return LockFile(filepath.Join(s.Dir, "lock")) }
+func (s *Store) Lock(ctx context.Context) (func(), error) {
+	return LockFile(ctx, filepath.Join(s.Dir, "lock"))
+}
 
 // LockFile takes an exclusive flock on path (creating it and its directory)
 // and returns the unlock function. It blocks until the lock is free.
-func LockFile(path string) (func(), error) {
+func LockFile(_ context.Context, path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
@@ -187,7 +190,7 @@ func readJSON(path, schema string, v any, schemaOf func() string) error {
 }
 
 // SaveCheck writes runs/<sha>/check.json.
-func (s *Store) SaveCheck(r *CheckRecord) error {
+func (s *Store) SaveCheck(ctx context.Context, r *CheckRecord) error {
 	d, err := s.RunDir(r.SHA)
 	if err != nil {
 		return err
@@ -196,7 +199,7 @@ func (s *Store) SaveCheck(r *CheckRecord) error {
 	if err := validateCheck(r); err != nil {
 		return err
 	}
-	return s.locked(func() error {
+	return s.locked(ctx, func() error {
 		if err := writeJSON(filepath.Join(d, "check.json"), r); err != nil {
 			return err
 		}
@@ -244,7 +247,7 @@ func (s *Store) LoadCheck(sha string) (*CheckRecord, error) {
 }
 
 // SaveReview writes runs/<sha>/review.json.
-func (s *Store) SaveReview(r *ReviewRecord) error {
+func (s *Store) SaveReview(ctx context.Context, r *ReviewRecord) error {
 	d, err := s.RunDir(r.SHA)
 	if err != nil {
 		return err
@@ -253,7 +256,7 @@ func (s *Store) SaveReview(r *ReviewRecord) error {
 	if err := validateReview(r); err != nil {
 		return err
 	}
-	return s.locked(func() error { return writeJSON(filepath.Join(d, "review.json"), r) })
+	return s.locked(ctx, func() error { return writeJSON(filepath.Join(d, "review.json"), r) })
 }
 
 // LoadReview reads the review record for sha.
@@ -276,7 +279,7 @@ func (s *Store) LoadReview(sha string) (*ReviewRecord, error) {
 }
 
 // SaveVerify writes runs/<sha>/verify.json.
-func (s *Store) SaveVerify(r *VerifyRecord) error {
+func (s *Store) SaveVerify(ctx context.Context, r *VerifyRecord) error {
 	d, err := s.RunDir(r.SHA)
 	if err != nil {
 		return err
@@ -285,7 +288,7 @@ func (s *Store) SaveVerify(r *VerifyRecord) error {
 	if err := validateVerify(r); err != nil {
 		return err
 	}
-	return s.locked(func() error { return writeJSON(filepath.Join(d, "verify.json"), r) })
+	return s.locked(ctx, func() error { return writeJSON(filepath.Join(d, "verify.json"), r) })
 }
 
 // LoadVerify reads the verify record for sha.
@@ -324,8 +327,8 @@ func (s *Store) LoadBranch(name string) (*Branch, error) {
 }
 
 // UpdateBranch loads, mutates and saves a branch under one lock hold.
-func (s *Store) UpdateBranch(name string, fn func(*Branch) error) error {
-	return s.locked(func() error {
+func (s *Store) UpdateBranch(ctx context.Context, name string, fn func(*Branch) error) error {
+	return s.locked(ctx, func() error {
 		b, err := s.LoadBranch(name)
 		if err != nil {
 			return err
@@ -355,8 +358,8 @@ func (b *Branch) NextFindingID() string {
 
 // locked runs fn holding the store lock. The lock is not re-entrant, so
 // callers inside fn must use the unlocked helpers.
-func (s *Store) locked(fn func() error) error {
-	unlock, err := s.Lock()
+func (s *Store) locked(ctx context.Context, fn func() error) error {
+	unlock, err := s.Lock(ctx)
 	if err != nil {
 		return err
 	}
