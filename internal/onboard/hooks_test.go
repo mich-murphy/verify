@@ -74,11 +74,11 @@ func TestRefusesUncachedCoverHookAndPreviewEqualsWrittenFile(t *testing.T) {
 	}
 }
 
-func TestWritesCacheableTestTarget(t *testing.T) {
+func TestWritesCacheableTestHookTarget(t *testing.T) {
 	fakePrek(t)
-	d := tmp(t, map[string]string{"go.mod": goModFile, "Makefile": "test:\n\tgo test -race ./...\n"})
+	d := tmp(t, map[string]string{"go.mod": goModFile, "Makefile": "test-hook:\n\tgo test -race ./...\n"})
 	res, written := apply(t, d)
-	if !strings.Contains(written, "id: test\n") || !strings.Contains(written, `"make test"`) || len(res.Findings) != 0 {
+	if !strings.Contains(written, "id: coverage\n") || !strings.Contains(written, `"make test-hook"`) || len(res.Findings) != 0 {
 		t.Fatalf("res=%+v\n%s", res, written)
 	}
 }
@@ -147,7 +147,7 @@ func TestFallsBackToTestHookTarget(t *testing.T) {
 	if !strings.Contains(written, `entry: "make test-hook"`) || strings.Contains(written, "make cover") {
 		t.Fatalf("test-hook not used:\n%s", written)
 	}
-	if len(res.Findings) != 1 || res.Findings[0].ID != "setup:coverage" {
-		t.Fatalf("coverage stays refused: %+v", res.Findings)
+	if len(res.Findings) != 0 {
+		t.Fatalf("following the refusal message must clear it: %+v", res.Findings)
 	}
 }

@@ -257,6 +257,7 @@ accepted alternative, or has one as a `-`-separated prefix or suffix (`web-oxlin
 
 If `prek list` fails (for example, a remote hook repository cannot be fetched on a cold cache),
 the audit reports a blocking `setup:prek-config` finding that carries prek's error.
+When no prek config exists, `setup:prek-config` is the only finding for the hook obligations and the rest are implied by it.
 
 Verify does not inspect what a hook runs: no tool or registry can certify that a hook named `lint`
 lints. The assurance is that a change to the prek config is a Sign-off change (§3), so a person
@@ -317,6 +318,9 @@ or reorders existing content:
 - The written hooks are a starting point that the author adjusts; the Sign-off approval covers
   what they run.
 - It installs the Git hook shims with `prek install --hook-type pre-commit --hook-type pre-push`.
+- Without `--apply`, text output ends with the full config under `would write <file>:`, the same text `--apply` writes.
+- When lefthook, husky or lint-staged config exists, it adds a `setup:hook-manager` note naming the file and its jobs that no written hook runs (matched by command text), and `--apply` leaves those files untouched.
+- It never writes a Go `test` or `coverage` hook whose Make recipe carries `-count=1` or `-shuffle`: it reports a blocking finding asking for a cacheable `test-hook` target, which is also tried as an entry point.
 
 An obligation that needs a code or tool-config change, such as enabling
 `noUncheckedIndexedAccess`, is printed rather than applied, because it can break the build. After

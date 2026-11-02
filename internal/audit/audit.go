@@ -77,7 +77,7 @@ func (r Report) Blocking() bool {
 func (r Report) Findings() []state.Finding {
 	var out []state.Finding
 	for _, o := range r.Obligations {
-		if o.Satisfied || o.Waived {
+		if o.Satisfied || o.Waived || o.Implied {
 			continue
 		}
 		sev := state.SeverityNote
@@ -207,7 +207,7 @@ func tsProject(dir string) (string, bool) {
 }
 
 // readHooks records discovery failures separately from unmet hook obligations.
-func (a *auditor) readHooks() ([]hook, bool) {
+func (a *auditor) readHooks() (hooks []hook, found, known bool) {
 	hooks, found, err := listHooks(a.ctx, a.dir)
 	if errors.Is(err, ErrUnsettled) {
 		a.setErr(err)
@@ -217,12 +217,12 @@ func (a *auditor) readHooks() ([]hook, bool) {
 		detail = err.Error()
 	}
 	a.add("prek-config", Required, detail, "run `verify setup --apply`, or create .pre-commit-config.yaml with `repo: local` hooks whose ids are the standard obligation ids (SPEC §4.3)")
-	return hooks, !found || err == nil
+	return hooks, found, err == nil
 }
 
 func (a *auditor) hookObligations(goP, tsP bool) {
-	hooks, known := a.readHooks()
-	if !known {
+	hooks, found, known := a.readHooks()
+	if !known && found {
 		return // discovery failed; do not infer which hooks are missing
 	}
 	var early []string
@@ -242,12 +242,15 @@ func (a *auditor) hookObligations(goP, tsP bool) {
 		slices.Sort(ids)
 		ids = slices.Compact(ids)
 		a.ruleNotes(r, lvl, ms, goP, tsP)
-		o := Obligation{ID: r.id, Level: lvl, Waived: a.cfg.Waived(r.id), Satisfied: len(ms) > 0, Hook: strings.Join(ids, ", ")}
+		o := Obligation{ID: r.id, Level: lvl, Waived: a.cfg.Waived(r.id), Satisfied: len(ms) > 0, Implied: !found, Hook: strings.Join(ids, ", ")}
 		if !o.Satisfied {
 			o.Detail = fmt.Sprintf("no prek hook for %s at pre-commit or pre-push (accepted ids: %s)", r.id, strings.Join(r.names(), ", "))
 			o.Fix = fmt.Sprintf("add a %s hook with id %q to the prek config (`verify setup --apply` writes it)", r.stage, r.id)
 		}
 		a.obs = append(a.obs, o)
+	}
+	if !found {
+		return // hook-tiers and hygiene are about a config that does not exist
 	}
 	a.toolNotes(hooks)
 	slices.Sort(early)
