@@ -671,6 +671,18 @@ func TestFixerRewriteIsAFindingNotAnAbort(t *testing.T) {
 	}
 }
 
+func TestFixerWithNonzeroExitStillSaysModified(t *testing.T) {
+	out := strings.Replace(fixerFailure, "- files were", "- exit code: 1\n- files were", 1)
+	stagePrek(t, map[string]stageSpec{"pre-commit": {sh: "printf x >> a.go", out: out, code: 1}})
+	res, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := finding(t, res.Record, "check:pre-commit:end-of-file-fixer"); f.Message != "modified a.go; run the fixer and commit" {
+		t.Fatalf("%+v", f)
+	}
+}
+
 func TestFailedPrepareRecordsLaterStepsAsSkipped(t *testing.T) {
 	fakePrek(t)
 	out, err := Run(t.Context(), newRepo(t, "prepare:\n  - {name: deps, run: [sh, -c, \"echo boom >&2; exit 1\"]}\n", true), Options{})
