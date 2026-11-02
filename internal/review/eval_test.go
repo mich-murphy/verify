@@ -78,7 +78,13 @@ func wrapperInfo(wrapper []byte) (models []string, tokens evalTokens) {
 		var ev struct {
 			Model      string                     `json:"model"`
 			ModelUsage map[string]json.RawMessage `json:"modelUsage"`
-			Usage      map[string]int             `json:"usage"`
+			Usage      struct {
+				In            int `json:"input_tokens"`
+				Out           int `json:"output_tokens"`
+				CacheRead     int `json:"cache_read_input_tokens"`
+				CacheCreation int `json:"cache_creation_input_tokens"`
+				CachedIn      int `json:"cached_input_tokens"`
+			} `json:"usage"`
 		}
 		if json.Unmarshal(line, &ev) != nil {
 			continue
@@ -89,10 +95,10 @@ func wrapperInfo(wrapper []byte) (models []string, tokens evalTokens) {
 		for m := range ev.ModelUsage {
 			models = append(models, m)
 		}
-		tokens.Input += ev.Usage["input_tokens"]
-		tokens.Output += ev.Usage["output_tokens"]
-		tokens.CacheRead += ev.Usage["cache_read_input_tokens"] + ev.Usage["cached_input_tokens"]
-		tokens.CacheCreation += ev.Usage["cache_creation_input_tokens"]
+		tokens.Input += ev.Usage.In
+		tokens.Output += ev.Usage.Out
+		tokens.CacheRead += ev.Usage.CacheRead + ev.Usage.CachedIn
+		tokens.CacheCreation += ev.Usage.CacheCreation
 	}
 	slices.Sort(models)
 	return slices.Compact(models), tokens
