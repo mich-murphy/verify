@@ -16,10 +16,10 @@ func TestBattlePersistedFindingIdentityCannotDowngrade(t *testing.T) {
 	f := blk("F1", state.SourceReview)
 	f.Rule, f.Path = "correctness", "a.go"
 	rec := &state.ReviewRecord{SHA: sha, MergeBase: sha, Branch: "feature", Reviewer: "codex", Status: state.StatusFail, Findings: []state.Finding{f}, CallsUsed: 1, Attempts: 1, Finished: time.Now().UTC()}
-	if err := st.SaveReview(rec); err != nil {
+	if err := st.SaveReview(t.Context(), rec); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.UpdateBranch("feature", func(b *state.Branch) error {
+	if err := st.UpdateBranch(t.Context(), "feature", func(b *state.Branch) error {
 		changed := f
 		changed.Severity, changed.Message = state.SeverityNote, "different claim"
 		b.Findings = []state.Finding{changed}

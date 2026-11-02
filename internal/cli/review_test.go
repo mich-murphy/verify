@@ -92,7 +92,7 @@ func passCheck(t *testing.T, repo string) {
 	base := strings.TrimSpace(gitOut(t, repo, "rev-parse", "main"))
 	now := time.Now().UTC()
 	rec := &state.CheckRecord{SHA: sha, MergeBase: base, Lane: "standard", Scope: "affected", Status: state.StatusPass, Started: now, Finished: now}
-	if err := state.Open(filepath.Join(repo, ".git")).SaveCheck(rec); err != nil {
+	if err := state.Open(filepath.Join(repo, ".git")).SaveCheck(t.Context(), rec); err != nil {
 		t.Fatal(err)
 	}
 }

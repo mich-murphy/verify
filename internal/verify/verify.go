@@ -71,7 +71,7 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*state.VerifyRecord
 		}
 	}
 	rec.Finished = time.Now().UTC()
-	if err := store.SaveVerify(rec); err != nil {
+	if err := store.SaveVerify(ctx, rec); err != nil {
 		return nil, err
 	}
 	return rec, nil
@@ -79,7 +79,7 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*state.VerifyRecord
 
 func runInWorktree(ctx context.Context, repo *gitx.Repo, store *state.Store, sha string, v config.Verify, rec *state.VerifyRecord) (runErr error) {
 	dir := store.WorktreesDir()
-	unlock, err := state.LockFile(filepath.Join(dir, "verify.lock"))
+	unlock, err := state.LockFile(ctx, filepath.Join(dir, "verify.lock"))
 	if err != nil {
 		return fmt.Errorf("lock worktree: %w", err)
 	}

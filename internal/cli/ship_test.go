@@ -59,11 +59,11 @@ func (e *shipEnv) records(t *testing.T, lane string, review bool) {
 	t.Helper()
 	base := strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "main"))
 	now := time.Now().UTC()
-	if err := e.st.SaveCheck(&state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: lane, Scope: "affected", Status: "pass", Started: now, Finished: now}); err != nil {
+	if err := e.st.SaveCheck(t.Context(), &state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: lane, Scope: "affected", Status: "pass", Started: now, Finished: now}); err != nil {
 		t.Fatal(err)
 	}
 	if review {
-		if err := e.st.SaveReview(&state.ReviewRecord{SHA: e.sha, MergeBase: base, Branch: "feature", Reviewer: "codex", Status: "pass", CallsUsed: 1, Attempts: 1, Finished: now}); err != nil {
+		if err := e.st.SaveReview(t.Context(), &state.ReviewRecord{SHA: e.sha, MergeBase: base, Branch: "feature", Reviewer: "codex", Status: "pass", CallsUsed: 1, Attempts: 1, Finished: now}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -159,7 +159,7 @@ func TestDecideAndStatus(t *testing.T) {
 	if _, code := runCLI(t, "decide", "bogus", "--reason", "x"); code != ExitUsage {
 		t.Fatalf("bad kind: %d", code)
 	}
-	if err := e.st.UpdateBranch("feature", func(b *state.Branch) error {
+	if err := e.st.UpdateBranch(t.Context(), "feature", func(b *state.Branch) error {
 		b.Findings = append(b.Findings, state.Finding{ID: "F1", Source: "review", Severity: "block", State: "open", Message: "bug"})
 		return nil
 	}); err != nil {
@@ -192,7 +192,7 @@ func TestDecideRejectsMismatchedLaneCheck(t *testing.T) {
 	check := &state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: "docs", Scope: "affected", Status: "fail", Started: now, Finished: now, Findings: []state.Finding{
 		{ID: "setup:x", Source: state.SourceSetup, Severity: state.SeverityBlock, State: state.StateOpen, Message: "missing setup"},
 	}}
-	if err := e.st.SaveCheck(check); err != nil {
+	if err := e.st.SaveCheck(t.Context(), check); err != nil {
 		t.Fatal(err)
 	}
 	if r, code := runCLI(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitBlocked || r.NextAction != "run verify check" || r.Message != "no check record for HEAD" {
@@ -203,7 +203,7 @@ func TestDecideRejectsMismatchedLaneCheck(t *testing.T) {
 		t.Fatalf("stale check recorded a decision: branch %+v, err %v", branch, err)
 	}
 	check.Lane = "standard"
-	if err := e.st.SaveCheck(check); err != nil {
+	if err := e.st.SaveCheck(t.Context(), check); err != nil {
 		t.Fatal(err)
 	}
 	if r, code := runCLI(t, "decide", "waive", "x", "--reason", "fixture"); code != ExitOK {
@@ -215,7 +215,7 @@ func TestDecideWaive(t *testing.T) {
 	e := newShipEnv(t)
 	now := time.Now().UTC()
 	base := strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "main"))
-	if err := e.st.SaveCheck(&state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: "standard", Scope: "affected", Status: "fail", Started: now, Finished: now, Findings: []state.Finding{
+	if err := e.st.SaveCheck(t.Context(), &state.CheckRecord{SHA: e.sha, MergeBase: base, Lane: "standard", Scope: "affected", Status: "fail", Started: now, Finished: now, Findings: []state.Finding{
 		{ID: "setup:x", Source: "setup", Severity: "block", State: "open", Message: "missing setup"},
 		{ID: "check:t", Source: "check", Severity: "block", State: "open", Message: "failed step"},
 		{ID: "guard:g", Source: "guard", Severity: "block", State: "open", Message: "guard hit"},
@@ -241,7 +241,7 @@ func TestDecideWaive(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 	noGo := &state.VerifyRecord{SHA: e.sha, MergeBase: base, Verdict: "no-go", Finished: time.Now().UTC(), Findings: []state.Finding{{ID: "verify:x", Source: state.SourceVerify, Severity: state.SeverityBlock, State: state.StateOpen, Message: "assertion failed"}}}
-	if err := e.st.SaveVerify(noGo); err != nil {
+	if err := e.st.SaveVerify(t.Context(), noGo); err != nil {
 		t.Fatal(err)
 	}
 	if r, code := runCLI(t, "decide", "waive", "verify", "--reason", "cannot run"); code != ExitUsage {
@@ -250,7 +250,7 @@ func TestDecideWaive(t *testing.T) {
 	noGo.Verdict = "inconclusive"
 	noGo.Findings[0].ID = "verify:inconclusive:setup"
 	noGo.Findings[0].Rule = "verify:inconclusive"
-	if err := e.st.SaveVerify(noGo); err != nil {
+	if err := e.st.SaveVerify(t.Context(), noGo); err != nil {
 		t.Fatal(err)
 	}
 	if r, code := runCLI(t, "decide", "waive", "verify", "--reason", "tool unavailable"); code != ExitOK {

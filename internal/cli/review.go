@@ -2,6 +2,7 @@ package cli
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -72,7 +73,7 @@ func runReview(env *Env) int {
 		return blocked("HEAD is detached; review requires a branch", "check out a branch")
 	}
 	// Serialize admission, call and publication for this branch, without blocking other branches.
-	unlock, err := state.LockFile(st.BranchPath(name) + ".review.lock")
+	unlock, err := state.LockFile(env.Ctx, st.BranchPath(name)+".review.lock")
 	if err != nil {
 		return blocked(err.Error(), "resolve the state lock error")
 	}
@@ -88,7 +89,7 @@ func runReview(env *Env) int {
 	if err == nil && previous.MergeBase == loaded.MergeBase && previous.Branch == name {
 		return reuseReview(env, previous, br, l.Lane)
 	}
-	if msg, next = reviewBudget(st, name, br); msg != "" {
+	if msg, next = reviewBudget(env.Ctx, st, name, br); msg != "" {
 		return blocked(msg, next)
 	}
 	return runPlannedReview(env, repo, st, rv, fallback, br, *intentFile, name, sha, loaded.MergeBase, l.Lane)
@@ -133,7 +134,7 @@ func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv, fallback r
 func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan reviewPlan, name, sha, mergeBase, laneName string) int {
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
 	countAttempt := func() error {
-		return st.UpdateBranch(name, func(b *state.Branch) error { b.ReviewAttempts++; return nil })
+		return st.UpdateBranch(env.Ctx, name, func(b *state.Branch) error { b.ReviewAttempts++; return nil })
 	}
 	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt)
 	fallbackFrom := ""
@@ -145,7 +146,7 @@ func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan 
 	}
 	if err != nil {
 		if used > 0 {
-			if uerr := st.UpdateBranch(name, func(b *state.Branch) error { b.ReviewCalls += used; return nil }); uerr != nil {
+			if uerr := st.UpdateBranch(env.Ctx, name, func(b *state.Branch) error { b.ReviewCalls += used; return nil }); uerr != nil {
 				err = errors.Join(err, uerr)
 			}
 		}
@@ -155,7 +156,7 @@ func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan 
 		}
 		return blocked(err.Error(), next)
 	}
-	open, err := applyReview(st, name, sha, resp, used)
+	open, err := applyReview(env.Ctx, st, name, sha, resp, used)
 	if err != nil {
 		return blocked(err.Error(), "resolve the state error")
 	}
@@ -169,7 +170,7 @@ func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan 
 		SHA: sha, MergeBase: mergeBase, Branch: name, Reviewer: rv.Name(), FallbackFrom: fallbackFrom, Delta: plan.delta, Status: status, Findings: open,
 		Resolved: resp.Resolved, Finished: time.Now().UTC(), CallsUsed: used, Attempts: attempts,
 	}
-	if err := st.SaveReview(rec); err != nil {
+	if err := st.SaveReview(env.Ctx, rec); err != nil {
 		return blocked(err.Error(), "resolve the state error")
 	}
 	res := Result{
@@ -204,12 +205,12 @@ func reviewAdmission(st *state.Store, name, sha, mergeBase, laneName string) (br
 }
 
 // reviewBudget is checked only after an exact-SHA/base/branch review is ruled out.
-func reviewBudget(st *state.Store, name string, br *state.Branch) (msg, next string) {
+func reviewBudget(ctx context.Context, st *state.Store, name string, br *state.Branch) (msg, next string) {
 	if br.Parked {
 		return "branch is parked", "verify decide accept the open findings, then verify decide approve"
 	}
 	if br.ReviewCalls >= config.ReviewCalls {
-		if err := st.UpdateBranch(name, func(b *state.Branch) error { b.Parked = true; return nil }); err != nil {
+		if err := st.UpdateBranch(ctx, name, func(b *state.Branch) error { b.Parked = true; return nil }); err != nil {
 			return err.Error(), "resolve the state error"
 		}
 		return fmt.Sprintf("review budget exhausted (%d/%d calls); branch parked", br.ReviewCalls, config.ReviewCalls), "verify decide"
@@ -250,8 +251,8 @@ func reuseReview(env *Env, rec *state.ReviewRecord, br *state.Branch, laneName s
 
 // applyReview records a validated response on the branch under the lock and
 // returns the review findings that remain open.
-func applyReview(st *state.Store, name, sha string, resp *review.Response, used int) (open []state.Finding, err error) {
-	err = st.UpdateBranch(name, func(b *state.Branch) error {
+func applyReview(ctx context.Context, st *state.Store, name, sha string, resp *review.Response, used int) (open []state.Finding, err error) {
+	err = st.UpdateBranch(ctx, name, func(b *state.Branch) error {
 		b.ReviewCalls += used
 		for _, f := range resp.Findings {
 			f.ID = b.NextFindingID()
