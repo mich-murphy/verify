@@ -1,0 +1,24 @@
+{
+  "ID": "undocumented-window-bound",
+  "Path": "fixture.go",
+  "BeforeSHA256": "29726661768d59ece10c9742d8ab34422ca26849f63a1e0d5a26d0da26ed7356",
+  "AfterSHA256": "e40396a799d324b178ceb28c7b0b4118a5bda3bb2f422101efee015729d7b6f9",
+  "OracleSHA256": "4a9c8dc25e9de0c8e0eb2a351d31e571e1a8f510be0a3c728e9b408632cf387b",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "Window must clamp the end of the slice to len(items); the diff removes the clamp and nothing in the file states the invariant.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -4,9 +4,5 @@\n \tif offset >= len(items) {\n \t\treturn nil\n \t}\n-\tend := offset + limit\n-\tif end > len(items) {\n-\t\tend = len(items)\n-\t}\n-\treturn items[offset:end]\n+\treturn items[offset : offset+limit]\n }\n",
+    "Messages": [
+      "Simplify Window."
+    ],
+    "Intent": "Simplify Window."
+  }
+}

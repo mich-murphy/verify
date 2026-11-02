@@ -1,0 +1,35 @@
+{
+  "ID": "fix-resolves-f1-adds-bug",
+  "Path": "fixture.go",
+  "BeforeSHA256": "0e2966f36ce371a1e454fa035546eb5fdb81abf6f27a27f6aec0ff7ccb26c9ae",
+  "AfterSHA256": "8fdf169b523327532a29cbbe442f17ef6ea1dd649f2eccd787a4d61ba15de51e",
+  "OracleSHA256": "777f20490c2ff9c3121208b0e21f54296528234ee6deba96f489ba2a1434df16",
+  "BeforePass": false,
+  "AfterPass": false,
+  "Why": "The guard fixes the empty-slice panic from F1, but it uses len < 2, so a single-element slice now averages to 0 instead of its element.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": [
+      "F1"
+    ]
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,6 +2,9 @@\n \n // Average returns the integer mean of xs.\n func Average(xs []int) int {\n+\tif len(xs) < 2 {\n+\t\treturn 0\n+\t}\n \tsum := 0\n \tfor _, x := range xs {\n \t\tsum += x\n",
+    "Messages": [
+      "Guard Average against empty input."
+    ],
+    "Intent": "Guard Average against empty input.",
+    "Open": [
+      {
+        "ID": "F1",
+        "Kind": "correctness",
+        "Path": "fixture.go",
+        "Line": 9,
+        "Claim": "Average panics with a division by zero on an empty slice."
+      }
+    ]
+  }
+}

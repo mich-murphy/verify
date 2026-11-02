@@ -1,0 +1,24 @@
+{
+  "ID": "swapped-argument-order",
+  "Path": "fixture.go",
+  "BeforeSHA256": "f9bff20d8db8238f8c53be39f87eadc557da8a6710f1d7cc4c1d1ac51abcf5ef",
+  "AfterSHA256": "f9a5245b3dab316f61c0019e0f86e0e5ea48c57c822bd777882de414c805f6c1",
+  "OracleSHA256": "a0a08c0416baa70444b19476b8120db722000cce31c2500b25718f7cb52e7458",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "The extracted transfer helper takes (from, to) but Settle passes (payee, payer), reversing the money movement. All argument types match.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,7 +1,11 @@\n package fixture\n+\n+func transfer(from, to *int, n int) {\n+\t*from -= n\n+\t*to += n\n+}\n \n // Settle moves n cents from the payer's balance to the payee's.\n func Settle(payer, payee *int, n int) {\n-\t*payer -= n\n-\t*payee += n\n+\ttransfer(payee, payer, n)\n }\n",
+    "Messages": [
+      "Extract transfer helper."
+    ],
+    "Intent": "Extract transfer helper."
+  }
+}

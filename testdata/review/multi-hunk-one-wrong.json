@@ -1,0 +1,24 @@
+{
+  "ID": "multi-hunk-one-wrong",
+  "Path": "fixture.go",
+  "BeforeSHA256": "5c2393b6966dd2ff328b2bb919cfdcfbe4ca39e6d39ba9f7c04ad3423ddf9e6f",
+  "AfterSHA256": "c70400ff8738d0fb99eb401b86800eca7470ad3cf97c629d7aea7fefb2f99324",
+  "OracleSHA256": "8393c2ed913279150b94039788be040d1337d915a3525cc26671ba52f4a8be9d",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "Three hunks: a comment edit, a correct Clamp rewrite, and Percent changed to divide before multiplying, which truncates to zero. Only the third is wrong.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,6 +1,6 @@\n package fixture\n \n-// Mean returns the integer average of xs, or 0 for an empty slice.\n+// Mean returns the integer average of xs; an empty slice averages to 0.\n func Mean(xs []int) int {\n \tif len(xs) == 0 {\n \t\treturn 0\n@@ -14,13 +14,7 @@\n \n // Clamp limits v to the range lo..hi.\n func Clamp(v, lo, hi int) int {\n-\tif v < lo {\n-\t\treturn lo\n-\t}\n-\tif v > hi {\n-\t\treturn hi\n-\t}\n-\treturn v\n+\treturn min(max(v, lo), hi)\n }\n \n // Percent returns part as a whole-number percentage of total.\n@@ -28,5 +22,5 @@\n \tif total == 0 {\n \t\treturn 0\n \t}\n-\treturn part * 100 / total\n+\treturn part / total * 100\n }\n",
+    "Messages": [
+      "Tidy numeric helpers."
+    ],
+    "Intent": "Tidy numeric helpers."
+  }
+}

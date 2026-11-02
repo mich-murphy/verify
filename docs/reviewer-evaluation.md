@@ -6,7 +6,12 @@
 
 - `Expect` is the scored answer, parsed once when the corpus loads. A case that needs a finding has `path`, `kind`, `blocking` and `repro`. A silent case has `"findings": "none"`. Every case has `resolved`, the exact set of open IDs the diff fixes (`[]` when none may be resolved).
 - `Why` is free text for humans and is never sent to a reviewer.
+- `Extra` lists further changed files, stored as `before.<name>` and `after.<name>`, for multi-file diffs.
 - The hashes, the oracle verdicts before and after, and the review `Input` complete the manifest.
+
+## Cases
+
+The first eight are one-line deletions with a doc comment that states the broken invariant, the easiest form of review. The other twelve cover what those lack: a bug with no invariant comment, a multi-hunk file where one hunk is wrong, a two-file diff where the caller is wrong, a loop-bound off-by-one, a lost error check, swapped same-typed arguments, a correct refactor and a correct performance change (both silent, measuring false positives), instructions to the reviewer inside the diff, a partial fix of F1 that must not be resolved, a fix of F1 that adds a new bug, and a different bug in a function with a resolved finding.
 
 ## Integrity (runs in ordinary tests)
 

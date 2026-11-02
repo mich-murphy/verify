@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,8 +58,34 @@ func (e Expect) validate() error {
 type corpusCase struct {
 	ID, Path, BeforeSHA256, AfterSHA256, OracleSHA256, Why string
 	BeforePass, AfterPass                                  bool
+	Extra                                                  []extraFile
 	Expect                                                 Expect
 	Input                                                  Input
+}
+
+// extraFile is another changed file in the same package, stored as
+// before.<Path> and after.<Path> next to the primary fixture.
+type extraFile struct{ Path, BeforeSHA256, AfterSHA256 string }
+
+func (c corpusCase) diffPaths() []string {
+	paths := []string{c.Path}
+	for _, e := range c.Extra {
+		paths = append(paths, e.Path)
+	}
+	return paths
+}
+
+// splitDiff cuts a multi-file diff into one section per changed path.
+func splitDiff(diff string) map[string]string {
+	sections := map[string]string{}
+	var path string
+	for line := range strings.SplitAfterSeq(diff, "\n") {
+		if rest, ok := strings.CutPrefix(line, "diff --git a/"); ok {
+			path, _, _ = strings.Cut(rest, " b/")
+		}
+		sections[path] += line
+	}
+	return sections
 }
 
 // fixtureBytes limits reads to the corpus tree; a manifest cannot name a path
@@ -233,10 +260,12 @@ func sourceFile(t *testing.T, id, name, wantHash string) []byte {
 	return data
 }
 
-func runOracle(t *testing.T, source, oracle []byte, wantPass bool) {
+func runOracle(t *testing.T, sources map[string][]byte, oracle []byte, wantPass bool) {
 	t.Helper()
 	dir := t.TempDir()
-	for name, data := range map[string][]byte{"fixture.go": source, "oracle_test.go": oracle} {
+	files := map[string][]byte{"oracle_test.go": oracle}
+	maps.Copy(files, sources)
+	for name, data := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -282,15 +311,25 @@ func validateCorpus(t *testing.T) []corpusCase {
 					t.Fatalf("expected resolved %s is not open", id)
 				}
 			}
-			before := sourceFile(t, c.ID, "before.go", c.BeforeSHA256)
-			after := sourceFile(t, c.ID, "after.go", c.AfterSHA256)
-			oracle := sourceFile(t, c.ID, "oracle_test.go", c.OracleSHA256)
-			if string(before) == string(after) {
-				t.Fatal("unchanged source")
+			before := map[string][]byte{c.Path: sourceFile(t, c.ID, "before.go", c.BeforeSHA256)}
+			after := map[string][]byte{c.Path: sourceFile(t, c.ID, "after.go", c.AfterSHA256)}
+			for _, e := range c.Extra {
+				before[e.Path] = sourceFile(t, c.ID, "before."+e.Path, e.BeforeSHA256)
+				after[e.Path] = sourceFile(t, c.ID, "after."+e.Path, e.AfterSHA256)
 			}
-			applied, err := replayDiff(c.Input.Diff, c.Path, before)
-			if err != nil || string(applied) != string(after) {
-				t.Fatalf("diff does not produce after source: %v", err)
+			oracle := sourceFile(t, c.ID, "oracle_test.go", c.OracleSHA256)
+			sections := splitDiff(c.Input.Diff)
+			if len(sections) != len(before) {
+				t.Fatalf("diff touches %d paths, manifest lists %d", len(sections), len(before))
+			}
+			for path, source := range before {
+				if string(source) == string(after[path]) {
+					t.Fatalf("%s unchanged", path)
+				}
+				applied, err := replayDiff(sections[path], path, source)
+				if err != nil || string(applied) != string(after[path]) {
+					t.Fatalf("diff does not produce after source for %s: %v", path, err)
+				}
 			}
 			packet, err := Build(c.Input)
 			if err != nil || len(packet) > 8192 {

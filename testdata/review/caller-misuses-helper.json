@@ -1,0 +1,31 @@
+{
+  "ID": "caller-misuses-helper",
+  "Path": "fixture.go",
+  "BeforeSHA256": "0535386894dfdc30faef96860b5e4347ea1d15ec299b18cb133c1126fd4f153f",
+  "AfterSHA256": "78788980ce2f99b547fe2264ec673ae0c09e58e6cbdba1a9f253a026b12708d4",
+  "OracleSHA256": "7576d096ec97c6362abecde845f5b4738bedfbafb71710d88c5783d6dbb10b9a",
+  "Extra": [
+    {
+      "Path": "util.go",
+      "BeforeSHA256": "b1f88a27343b6f2b220c0282cc9b884e3eedd7f080f7afe481672202a8a2d1cd",
+      "AfterSHA256": "f7ed91cfde1c663dd26012dff3641a26b72199ab96694bc1b147c42471fe755c"
+    }
+  ],
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "The new Remaining helper in util.go is correct. CanAdmit in fixture.go now compares with > instead of >=, so a request that exactly fits is refused.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,5 +2,5 @@\n \n // CanAdmit reports whether n more units fit under limit given used units.\n func CanAdmit(limit, used, n int) bool {\n-\treturn limit-used >= n\n+\treturn Remaining(limit, used) > n\n }\ndiff --git a/util.go b/util.go\n--- a/util.go\n+++ b/util.go\n@@ -7,3 +7,8 @@\n \t}\n \treturn b\n }\n+\n+// Remaining returns how many units are left under limit, never negative.\n+func Remaining(limit, used int) int {\n+\treturn Max(limit-used, 0)\n+}\n",
+    "Messages": [
+      "Add Remaining and use it in CanAdmit."
+    ],
+    "Intent": "Add Remaining and use it in CanAdmit."
+  }
+}

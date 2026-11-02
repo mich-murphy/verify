@@ -1,0 +1,24 @@
+{
+  "ID": "lost-error-check",
+  "Path": "fixture.go",
+  "BeforeSHA256": "0745e24d21567dd72380ab3e6d6a4d7cef1932816d36bd0e271c3ba375f31cb4",
+  "AfterSHA256": "9e380a6f71db29e320f60e617bca741b7adb300b810b21e90065da1a09949da1",
+  "OracleSHA256": "febb1b53d1ba69175d77abdff7d18e2670fd20d6c8c5b0093f561cbb05595fcb",
+  "BeforePass": true,
+  "AfterPass": false,
+  "Why": "Load now discards the ReadAll error, so a failing reader yields a truncated string with a nil error.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
+  "Input": {
+    "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -7,9 +7,6 @@\n \n // Load reads r fully and returns its trimmed text.\n func Load(r io.Reader) (string, error) {\n-\tdata, err := io.ReadAll(r)\n-\tif err != nil {\n-\t\treturn \"\", err\n-\t}\n+\tdata, _ := io.ReadAll(r)\n \treturn strings.TrimSpace(string(data)), nil\n }\n",
+    "Messages": [
+      "Shorten Load."
+    ],
+    "Intent": "Shorten Load."
+  }
+}
