@@ -100,7 +100,7 @@ func (p *prekParser) end() {
 		p.cur.Status = state.HookPass
 	case p.status == "Skipped":
 		p.cur.Status = state.HookSkipped
-	case p.modified && p.cur.ExitCode == 0:
+	case p.modified:
 		p.cur.Status = state.HookModified
 	default:
 		p.cur.Status = state.HookFail
