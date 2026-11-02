@@ -33,6 +33,7 @@ type Obligation struct {
 	Satisfied bool
 	Waived    bool
 	Hook      string // the prek hook that met a hook obligation
+	Implied   bool   // unmet only because the prek config is missing; not reported
 	Detail    string // why it is unmet
 	Fix       string // concrete config snippet
 }

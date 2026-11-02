@@ -18,15 +18,36 @@ import (
 	"github.com/mich-murphy/verify/internal/audit"
 	"github.com/mich-murphy/verify/internal/config"
 	"github.com/mich-murphy/verify/internal/pkgmgr"
+	"github.com/mich-murphy/verify/internal/state"
 )
 
 const prekFile = ".pre-commit-config.yaml"
 
 // Result lists what Apply wrote and what it could not do.
 type Result struct {
-	Written []string
-	Notes   []string
+	Written  []string
+	Notes    []string
+	Findings []state.Finding // blocking obligations Apply refused to guess
 }
+
+// Plan is what Apply would write to the prek config.
+type Plan struct {
+	Path     string
+	Old      []byte // current content; nil when the file does not exist
+	Text     string // full file content to write; "" when nothing changes
+	Notes    []string
+	Findings []state.Finding
+}
+
+// Build computes the plan without writing.
+func Build(dir string, rep audit.Report) (Plan, error) { return Plan{}, nil }
+
+// Final is the prek config text that exists once the plan is applied.
+func (p Plan) Final() string { return "" }
+
+// HookManagers reports other hook managers (lefthook, husky, lint-staged)
+// whose jobs have no counterpart in the prek config text final.
+func HookManagers(dir, final string) []state.Finding { return nil }
 
 // hygiene is the builtin hook block written to a new prek config. Hooks are
 // written in block style, which repository YAML formatters (oxfmt, prettier)
