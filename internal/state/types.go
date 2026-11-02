@@ -24,6 +24,7 @@ const (
 	StateOpen     = "open"
 	StateResolved = "resolved"
 	StateAccepted = "accepted"
+	StateWaived   = "waived"
 )
 
 // Repro is the concrete input and expectation behind a finding.
@@ -73,13 +74,24 @@ const (
 	DecideWaive   = "waive"
 )
 
+// DecisionCoverage is the evidence behind an approval: the range it covers
+// and the check record it relies on.
+type DecisionCoverage struct {
+	From  string `json:"from"` // last reviewed sha, or the merge-base when nothing was reviewed
+	To    string `json:"to"`   // the approved sha
+	Files int    `json:"files"`
+	Lines int    `json:"lines"`
+	Check string `json:"check"` // sha of the check record relied on
+}
+
 // Decision is a recorded human decision.
 type Decision struct {
-	Kind   string    `json:"kind"`
-	Target string    `json:"target,omitempty"`
-	Reason string    `json:"reason,omitempty"`
-	SHA    string    `json:"sha"`
-	Time   time.Time `json:"time"`
+	Kind     string            `json:"kind"`
+	Target   string            `json:"target,omitempty"`
+	Reason   string            `json:"reason,omitempty"`
+	SHA      string            `json:"sha"`
+	Time     time.Time         `json:"time"`
+	Coverage *DecisionCoverage `json:"coverage,omitempty"`
 }
 
 // Branch is verify.branch/1: per-branch review state.
