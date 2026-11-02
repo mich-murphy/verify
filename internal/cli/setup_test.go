@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,5 +56,72 @@ func TestSetupApplyWritesAndReruns(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repo, ".pre-commit-config.yaml")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+const golangciV2 = `version: "2"
+linters:
+  enable: [govet, staticcheck, errcheck, errorlint, ineffassign, unused, gosec, revive, gocritic, nolintlint, gocognit]
+  settings:
+    nolintlint:
+      require-explanation: true
+`
+
+// memoryRepo is a Go repository whose hooks live in lefthook and whose cover
+// target runs tests uncached.
+func memoryRepo(t *testing.T) string {
+	t.Helper()
+	repo := setup(t, "fake")
+	_ = os.Remove(filepath.Join(repo, "verify.yaml"))
+	_ = os.Remove(filepath.Join(repo, ".pre-commit-config.yaml"))
+	write(t, repo, "go.mod", "module x\n\ngo 1.26.1\n")
+	write(t, repo, ".golangci.yml", golangciV2)
+	write(t, repo, "lefthook.yml", "pre-commit:\n  jobs:\n    - name: lint\n      run: make lint\npre-push:\n  jobs:\n    - name: test\n      run: make test\n")
+	write(t, repo, "Makefile", "lint:\n\ttrue\ncover:\n\tgo test -race -count=1 -shuffle=on ./...\n")
+	return repo
+}
+
+func blockingRules(r Result) []string {
+	var out []string
+	for _, f := range r.Findings {
+		if f.Severity == "block" {
+			out = append(out, f.Rule)
+		}
+	}
+	return out
+}
+
+func TestSetupWithoutPrekConfigReportsOneFindingAndPreviewsTheFile(t *testing.T) {
+	repo := memoryRepo(t)
+	r, code := runCLI(t, "setup")
+	if got := blockingRules(r); code != ExitFindings || len(got) != 1 || got[0] != "setup:prek-config" {
+		t.Fatalf("code=%d blocking=%v", code, got)
+	}
+	var out, errb bytes.Buffer
+	Run([]string{"setup"}, strings.NewReader(""), &out, &errb)
+	_, tail, ok := strings.Cut(out.String(), "would write .pre-commit-config.yaml:\n")
+	if !ok {
+		t.Fatalf("no preview in:\n%s", out.String())
+	}
+	preview, _, _ := strings.Cut(tail, "\nnext: ")
+	if _, err := os.Stat(filepath.Join(repo, ".pre-commit-config.yaml")); err == nil {
+		t.Fatal("preview wrote the config")
+	}
+	applied, code := runCLI(t, "setup", "--apply")
+	written, err := os.ReadFile(filepath.Join(repo, ".pre-commit-config.yaml")) // #nosec G304 -- test temp dir
+	if err != nil || strings.TrimSpace(preview) != strings.TrimSpace(string(written)) {
+		t.Fatalf("code=%d err=%v\n--- preview\n%s\n--- written\n%s", code, err, preview, written)
+	}
+	var sawCover, sawManager bool
+	for _, f := range applied.Findings {
+		sawCover = sawCover || f.Rule == "setup:coverage" && strings.HasPrefix(f.Message, "make cover runs tests uncached (-count=1 or -shuffle); add a cacheable target such as `test-hook: go test -race ./...` and rerun verify setup --apply")
+		sawManager = sawManager || f.Rule == "setup:hook-manager" && strings.Contains(f.Message, "lefthook.yml") && strings.Contains(f.Message, "test (make test)")
+	}
+	if !sawCover || !sawManager {
+		t.Fatalf("cover refusal=%v hook-manager note=%v in %+v", sawCover, sawManager, applied.Findings)
+	}
+	lh, _ := os.ReadFile(filepath.Join(repo, "lefthook.yml")) // #nosec G304 -- test temp dir
+	if !strings.Contains(string(lh), "make test") {
+		t.Fatal("lefthook.yml changed")
 	}
 }

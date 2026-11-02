@@ -3,6 +3,7 @@
 package onboard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -18,14 +19,32 @@ import (
 	"github.com/mich-murphy/verify/internal/audit"
 	"github.com/mich-murphy/verify/internal/config"
 	"github.com/mich-murphy/verify/internal/pkgmgr"
+	"github.com/mich-murphy/verify/internal/state"
 )
 
 const prekFile = ".pre-commit-config.yaml"
 
 // Result lists what Apply wrote and what it could not do.
 type Result struct {
-	Written []string
-	Notes   []string
+	Written  []string
+	Notes    []string
+	Findings []state.Finding // blocking obligations Apply refused to guess
+}
+
+// Plan is what Apply would write to the prek config.
+type Plan struct {
+	Path   string
+	Old    []byte // current content; nil when the file does not exist
+	Text   string // full file content to write; "" when nothing changes
+	Result        // Notes and Findings; Written stays empty until Apply writes
+}
+
+// Final is the prek config text that exists once the plan is applied.
+func (p Plan) Final() string {
+	if p.Text != "" {
+		return p.Text
+	}
+	return string(p.Old)
 }
 
 // hygiene is the builtin hook block written to a new prek config. Hooks are
@@ -62,8 +81,15 @@ func Apply(ctx context.Context, dir string, rep audit.Report) (Result, error) {
 	if rep.Profile == "" || rep.Profile == "unsupported" {
 		return res, nil
 	}
-	if err := writePrek(ctx, dir, rep, &res); err != nil {
+	pl, err := Build(dir, rep)
+	if err != nil {
 		return res, err
+	}
+	res = pl.Result
+	if pl.Text != "" {
+		if err := commit(ctx, dir, pl.Path, pl.Old, pl.Text, &res); err != nil {
+			return res, err
+		}
 	}
 	installHooks(ctx, dir, &res)
 	return res, nil
@@ -73,42 +99,47 @@ func writeNew(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o644) // #nosec G306 G703 -- tracked repository config, not a secret
 }
 
-func writePrek(ctx context.Context, dir string, rep audit.Report, res *Result) error {
+// Build computes what Apply would write, without writing. The setup preview
+// and Apply both use it, so the text shown is the text written.
+func Build(dir string, rep audit.Report) (Plan, error) {
+	var pl Plan
+	if rep.Profile == "" || rep.Profile == "unsupported" {
+		return pl, nil
+	}
 	path, err := config.PrekConfig(dir)
 	if err != nil {
-		return err
+		return pl, err
 	}
 	if filepath.Base(path) == "prek.toml" {
-		res.Notes = append(res.Notes, "prek.toml exists; add the hooks named by the audit to it by hand")
-		return nil
+		pl.Notes = append(pl.Notes, "prek.toml exists; add the hooks named by the audit to it by hand")
+		return pl, nil
 	}
 	exists := path != ""
 	if !exists {
 		path = filepath.Join(dir, prekFile)
 	}
-	var old []byte
+	pl.Path = path
 	if exists {
-		old, err = os.ReadFile(path) // #nosec G304 -- repository config selected by PrekConfig
-		if err != nil {
-			return err
+		if pl.Old, err = os.ReadFile(path); err != nil { // #nosec G304 -- repository config selected by PrekConfig
+			return pl, err
 		}
 	}
 	head, indent, used := "minimum_prek_version: \"0.5.0\"\nrepos:\n"+hygieneBlock(), 2, map[string]bool{}
 	if exists {
 		var ok bool
-		if head, indent, used, ok = plan(string(old)); !ok {
-			res.Notes = append(res.Notes, filepath.Base(path)+" is not a block-style list ending the file; add the hooks named by the audit by hand")
-			return nil
+		if head, indent, used, ok = plan(string(pl.Old)); !ok {
+			pl.Notes = append(pl.Notes, filepath.Base(path)+" is not a block-style list ending the file; add the hooks named by the audit by hand")
+			return pl, nil
 		}
 	}
-	block, err := localBlock(dir, rep, used, indent, res)
+	block, err := localBlock(dir, rep, used, indent, &pl.Result)
 	if err != nil {
-		return err
+		return pl, err
 	}
-	if exists && block == "" {
-		return nil
+	if !exists || block != "" {
+		pl.Text = head + block
 	}
-	return commit(ctx, dir, path, old, head+block, res)
+	return pl, nil
 }
 
 // commit writes text to path and checks prek accepts it, restoring old
@@ -209,7 +240,9 @@ var checkOnly = map[string]bool{"format": true, "tidy": true}
 
 // entryPoint finds an existing Make target or package script by name only:
 // the standard id or an accepted alternative (optionally with a -check suffix).
-func entryPoint(dir, id string, names []string) (string, error) {
+// For Go test and coverage hooks `test-hook` is the last candidate, and a Make
+// target whose recipe runs tests uncached is skipped and returned as refused.
+func entryPoint(dir, id, profile string, names []string) (entry, refused string, err error) {
 	var cands []string
 	for _, n := range names {
 		if checkOnly[id] {
@@ -218,33 +251,54 @@ func entryPoint(dir, id string, names []string) (string, error) {
 			cands = append(cands, n, n+"-check")
 		}
 	}
+	goTests := (id == "test" || id == "coverage") && (profile == "go" || profile == "mixed")
+	if goTests {
+		cands = append(cands, "test-hook")
+	}
+	if entry, refused = makeTarget(dir, cands, goTests); entry != "" {
+		return entry, refused, nil
+	}
+	sub, m := pkgmgr.Project(dir)
+	p, err := pkgmgr.ReadPackage(filepath.Join(dir, sub))
+	if err != nil || p == nil {
+		return "", refused, err
+	}
+	for _, n := range cands {
+		if p.Scripts[n] != "" {
+			return m.RunScript(sub, n), refused, nil
+		}
+	}
+	return "", refused, nil
+}
+
+// makeTarget returns `make <target>` for the first candidate the Makefile
+// defines. With skipUncached, a target whose recipe runs Go tests uncached is
+// skipped and the first one skipped is returned as refused.
+func makeTarget(dir string, cands []string, skipUncached bool) (entry, refused string) {
 	for _, f := range []string{"Makefile", "makefile", "GNUmakefile"} {
 		b, err := os.ReadFile(filepath.Join(dir, f)) // #nosec G304 -- fixed names under the repo root
 		if err != nil {
 			continue
 		}
 		for _, n := range cands {
-			if regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(n) + `:`).Match(b) {
-				return "make " + n, nil
+			if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(n) + `:`).Match(b) {
+				continue
 			}
+			if skipUncached && audit.Uncached(audit.MakeRecipe(string(b), n)) {
+				refused = cmp.Or(refused, n)
+				continue
+			}
+			return "make " + n, refused
 		}
 		break
 	}
-	sub, m := pkgmgr.Project(dir)
-	p, err := pkgmgr.ReadPackage(filepath.Join(dir, sub))
-	if err != nil || p == nil {
-		return "", err
-	}
-	for _, n := range cands {
-		if p.Scripts[n] != "" {
-			return m.RunScript(sub, n), nil
-		}
-	}
-	return "", nil
+	return "", refused
 }
 
-// wanted lists the unmet, unwaived REQUIRED hook obligations. One coverage
-// hook meets the test obligation too, so no separate test hook is written.
+// wanted lists the unmet, unwaived REQUIRED hook obligations. A coverage hook
+// meets the test obligation too, so no separate test hook is written, unless
+// the coverage entry point was refused as uncached and the repository has a
+// cacheable test entry point of its own.
 func wanted(dir string, rep audit.Report) ([]string, error) {
 	var ids []string
 	for _, o := range rep.Obligations {
@@ -252,19 +306,29 @@ func wanted(dir string, rep audit.Report) ([]string, error) {
 			ids = append(ids, o.ID)
 		}
 	}
-	if i := slices.Index(ids, "test"); i >= 0 {
-		if slices.Contains(ids, "coverage") {
-			ids = slices.Delete(ids, i, i+1)
-		} else {
-			_, names, _ := audit.HookRule("coverage")
-			e, err := entryPoint(dir, "coverage", names)
-			if err != nil {
-				return nil, err
-			}
-			if e != "" {
-				ids[i] = "coverage"
-			}
+	i := slices.Index(ids, "test")
+	if i < 0 {
+		return ids, nil
+	}
+	_, names, _ := audit.HookRule("coverage")
+	e, refused, err := entryPoint(dir, "coverage", rep.Profile, names)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case !slices.Contains(ids, "coverage"):
+		if e != "" {
+			ids[i] = "coverage"
 		}
+	case e == "" && refused != "":
+		_, testNames, _ := audit.HookRule("test")
+		if own, _, err := entryPoint(dir, "test", rep.Profile, testNames); err != nil {
+			return nil, err
+		} else if own == "" {
+			ids = slices.Delete(ids, i, i+1)
+		}
+	default:
+		ids = slices.Delete(ids, i, i+1)
 	}
 	return ids, nil
 }
@@ -325,9 +389,13 @@ func localBlock(dir string, rep audit.Report, used map[string]bool, indent int, 
 			continue
 		}
 		d, ok := hookDef(rep.Profile, id)
-		entry, err := entryPoint(dir, id, names)
+		entry, refused, err := entryPoint(dir, id, rep.Profile, names)
 		if err != nil {
 			return "", err
+		}
+		if entry == "" && refused != "" {
+			res.Findings = append(res.Findings, uncachedFinding(id, refused))
+			continue
 		}
 		if rep.Profile == "mixed" && sharedHook(id) && entry == "" {
 			res.Notes = append(res.Notes, "no "+id+" hook written for mixed profile: add a shared entry point covering both languages")
@@ -341,15 +409,26 @@ func localBlock(dir string, rep audit.Report, used map[string]bool, indent int, 
 		if b.Len() == 0 {
 			b.WriteString(pad + "- repo: local\n" + pad + "  hooks:\n")
 		}
-		for i, line := range hookFields(id, stage, entry, d, filenames) {
-			lead := pad + "      "
-			if i == 0 {
-				lead = pad + "    - "
-			}
-			b.WriteString(lead + line + "\n")
-		}
+		writeHook(&b, pad, hookFields(id, stage, entry, d, filenames))
 	}
 	return b.String(), nil
+}
+
+func writeHook(b *strings.Builder, pad string, lines []string) {
+	for i, line := range lines {
+		lead := pad + "      "
+		if i == 0 {
+			lead = pad + "    - "
+		}
+		b.WriteString(lead + line + "\n")
+	}
+}
+
+func uncachedFinding(id, target string) state.Finding {
+	return state.Finding{
+		ID: "setup:" + id, Source: state.SourceSetup, Rule: "setup:" + id, Severity: state.SeverityBlock, State: state.StateOpen,
+		Message: "make " + target + " runs tests uncached (-count=1 or -shuffle); add a cacheable target such as `test-hook: go test -race ./...` and rerun verify setup --apply",
+	}
 }
 
 func installHooks(ctx context.Context, dir string, res *Result) {

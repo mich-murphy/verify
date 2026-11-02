@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -245,5 +246,32 @@ func TestGoProjectHasNoPrekConfig(t *testing.T) {
 	r, err := Run(t.Context(), "../../testdata/audit/go-project", config.Default())
 	if err != nil || r.Profile != "go" || get(t, r, "prek-config").Satisfied {
 		t.Fatalf("%+v %v", r, err)
+	}
+}
+
+func TestMissingPrekConfigImpliesHookObligations(t *testing.T) {
+	d := repo(t, map[string]string{"go.mod": goMod})
+	r, err := Run(t.Context(), d, config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blocking []string
+	for _, f := range r.Findings() {
+		if f.Severity == "block" {
+			blocking = append(blocking, f.ID)
+		}
+	}
+	for _, id := range blocking {
+		if stage, _, isHook := HookRule(strings.TrimPrefix(id, "setup:")); isHook {
+			t.Errorf("%s (%s hook) is implied by the missing config and must not be reported", id, stage)
+		}
+	}
+	if !slices.Contains(blocking, "setup:prek-config") || !slices.Contains(blocking, "setup:golangci-config") {
+		t.Fatalf("blocking = %v, want prek-config and the file obligations that do not depend on it", blocking)
+	}
+	for _, o := range r.Obligations {
+		if o.ID == "format" && !o.Implied {
+			t.Fatal("format must stay in the report, marked implied, so onboarding knows what to write")
+		}
 	}
 }
