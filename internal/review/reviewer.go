@@ -200,6 +200,9 @@ func (c *Claude) Run(ctx context.Context, packet []byte) ([]byte, Usage, error) 
 		}
 		return nil, Usage{}, classify("claude", err, stderr, stdout)
 	}
+	if c.Capture != nil {
+		c.Capture(stdout)
+	}
 	var w struct {
 		IsError          bool            `json:"is_error"`
 		Result           json.RawMessage `json:"result"`
@@ -300,6 +303,9 @@ func (c *Codex) Run(ctx context.Context, packet []byte) ([]byte, Usage, error) {
 			return stdout, Usage{}, err
 		}
 		return nil, Usage{}, classify("codex", err, stderr, codexError(stdout), stdout)
+	}
+	if c.Capture != nil {
+		c.Capture(stdout)
 	}
 	u, err := scanEvents(stdout)
 	if err != nil {

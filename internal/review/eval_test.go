@@ -12,8 +12,11 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/mich-murphy/verify/internal/state"
 )
 
 var (
@@ -33,7 +36,38 @@ func openIDs(in Input) []string {
 // scoreResponse compares a validated reviewer answer with the case's Expect.
 // Failures fail the case. Notes record extra findings on a bug case, so
 // precision is visible without failing recall.
-func scoreResponse(Expect, *Response) (failures, notes []string) { return nil, nil }
+func scoreResponse(e Expect, r *Response) (failures, notes []string) {
+	describe := func(f state.Finding) string {
+		return fmt.Sprintf("%s %s:%d severity=%s repro=%t", f.Rule, f.Path, f.Line, f.Severity, f.Repro != nil)
+	}
+	if e.silent() {
+		for _, f := range r.Findings {
+			failures = append(failures, "unexpected finding: "+describe(f))
+		}
+	} else {
+		hit := slices.IndexFunc(r.Findings, func(f state.Finding) bool {
+			return f.Path == e.Path && f.Rule == e.Kind &&
+				(f.Severity == state.SeverityBlock) == e.Blocking && (!e.Repro || f.Repro != nil)
+		})
+		if hit < 0 {
+			got := make([]string, 0, len(r.Findings))
+			for _, f := range r.Findings {
+				got = append(got, describe(f))
+			}
+			failures = append(failures, fmt.Sprintf("no finding with path=%s kind=%s blocking=%t repro=%t; got [%s]",
+				e.Path, e.Kind, e.Blocking, e.Repro, strings.Join(got, "; ")))
+		}
+		for i, f := range r.Findings {
+			if hit >= 0 && i != hit {
+				notes = append(notes, "extra finding: "+describe(f))
+			}
+		}
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(r.Resolved)), slices.Sorted(slices.Values(e.Resolved))) {
+		failures = append(failures, fmt.Sprintf("resolved %v, want %v", r.Resolved, e.Resolved))
+	}
+	return failures, notes
+}
 
 type evalTokens struct{ Input, Output, CacheRead, CacheCreation int }
 
@@ -114,8 +148,11 @@ func evaluate(ctx context.Context, rv Reviewer, rec *recorder, model string, cas
 		obs.Pass = obs.Error == "" && len(obs.Failures) == 0
 		results = append(results, obs)
 		persist(results)
+		if errors.Is(runErr, ErrUnavailable) {
+			return results, runErr
+		}
 	}
-	return results, errors.New("abort on unavailable is not implemented")
+	return results, nil
 }
 
 // TestReviewLiveEvaluation does not invoke any reviewer without explicit flags.
