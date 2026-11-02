@@ -23,6 +23,9 @@ import (
 
 const prekTimeout = 30 * time.Minute
 
+// reuseMaxAge bounds how old a passing check may be and still stand in for a new one.
+const reuseMaxAge = 24 * time.Hour
+
 // fastTierBudget is the SPEC §4.5 pre-commit budget; a variable so tests can lower it.
 var fastTierBudget = 5 * time.Second
 
@@ -235,7 +238,8 @@ func (rc *runCtx) reusable() (*state.CheckRecord, bool) {
 	}
 	old, err := rc.store.LoadCheck(sha)
 	if err != nil || old.Status != "pass" || old.Tree != cur.Tree || old.MergeBase != cur.MergeBase ||
-		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion {
+		old.Lane != cur.Lane || old.Scope != cur.Scope || old.PrekVersion != cur.PrekVersion ||
+		time.Since(old.Finished) > reuseMaxAge {
 		return nil, false
 	}
 	if old.SHA == cur.SHA {
