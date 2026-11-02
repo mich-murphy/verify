@@ -68,7 +68,7 @@ export default function (pi: ExtensionAPI) {
 			const lines = (r.findings ?? [])
 				.filter((f: any) => f.severity === "block")
 				.slice(0, MAX_FINDINGS)
-				.map((f: any) => `- ${f.id}${f.path ? ` (${f.path}${f.line ? `:${f.line}` : ""})` : ""}: ${f.message}`);
+				.map((f: any) => `- ${f.id}${f.path ? ` (${f.path}${f.line ? `:${f.line}` : ""})` : ""}${f.hook ? ` [hook ${f.hook}]` : ""}: ${f.message}${f.excerpt ? `\n  ${String(f.excerpt).split("\n")[0]}` : ""}`);
 			summary = lines.join("\n") || r.message || "";
 		} catch {
 			summary = res.stdout || res.stderr;

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -53,6 +54,42 @@ func (s *Store) LogPath(sha, step string) (string, error) {
 	}
 	name := url.PathEscape(step)
 	return filepath.Join(d, "logs", name+".log"), nil
+}
+
+// NewAttempt creates runs/<sha>/logs/<n> for the next check attempt n and
+// returns n with the absolute directory. Earlier attempts are never touched.
+func (s *Store) NewAttempt(sha string) (int, string, error) {
+	d, err := s.RunDir(sha)
+	if err != nil {
+		return 0, "", err
+	}
+	logs, err := filepath.Abs(filepath.Join(d, "logs"))
+	if err != nil {
+		return 0, "", err
+	}
+	if err = os.MkdirAll(logs, 0o700); err != nil {
+		return 0, "", err
+	}
+	ents, err := os.ReadDir(logs)
+	if err != nil {
+		return 0, "", err
+	}
+	n := 0
+	for _, e := range ents {
+		if k, aerr := strconv.Atoi(e.Name()); aerr == nil && e.IsDir() && k > n {
+			n = k
+		}
+	}
+	for {
+		n++
+		dir := filepath.Join(logs, strconv.Itoa(n))
+		if err = os.Mkdir(dir, 0o700); err == nil {
+			return n, dir, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return 0, "", err
+		}
+	}
 }
 
 // BranchPath is branches/<branch>.json; slashes in branch names are escaped.

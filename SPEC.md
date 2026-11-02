@@ -121,7 +121,7 @@ State lives under `<git-common-dir>/verify/`. Linked worktrees share it, and it 
 | `runs/<sha>/check.json` | `verify.check/1` record. |
 | `runs/<sha>/review.json` | `verify.review/1` record. |
 | `runs/<sha>/verify.json` | `verify.verify/1` record. |
-| `runs/<sha>/logs/<step>.log` | Step output. |
+| `runs/<sha>/logs/<attempt>/<step>.log` | Step output. A check run on the same SHA starts a new attempt (1, 2, …) and never overwrites an earlier one. |
 | `lock` | Lock file. |
 
 Writes are atomic (temp file, fsync, rename) and are made while holding the lock. Branch and log
@@ -209,7 +209,7 @@ The finding goes away when a `verify decide accept` on that SHA references the g
 
 Verify first runs each `prepare:` entry in the worktree (for example `npm ci`, because a fresh
 worktree has no `node_modules`). A failing prepare step is a blocking `check:prepare-<name>`
-finding, and the remaining steps are skipped.
+finding, and every later planned step is recorded with status `skipped`, never omitted.
 
 Checks run only on the change's blast radius. Verify computes the scope once per run:
 
@@ -229,8 +229,16 @@ variables of its own.
 
 The check record holds `scope` and, for `full`, the reason (`scope_reason`). `ship` accepts
 either scope: a scoped check is fast local evidence, and CI stays complete before merge. Every
-step records its exit code, its duration and a log path. A non-zero exit is a blocking finding
-that names the step.
+step records its exit code, its duration and a log path (`log_dir` and `attempt` on the record name
+the attempt's directory). A failed prepare step or prek stage is blocking and skips every later step.
+
+A failed prek stage yields one blocking `check:<stage>:<hook-id>` finding per failed hook, with
+`hook`, `log` and an `excerpt` (at most 20 lines and 2 KiB of the hook's output), and the message
+`<hook-id> failed (exit N): <first failing line>`. A stage that fails with no parseable hook (prek
+itself errored) keeps one `check:prek-<stage>` finding with the excerpt. A hook that rewrote tracked
+files yields `check:<stage>:<hook-id>` with the message `modified <paths>; run the fixer and commit`,
+and Verify restores the worktree. A stage over its §4.5 budget adds a note `check:budget:<stage>`
+naming its three slowest hooks. Each stage step lists its hooks (`id`, `status`, `duration_ms`).
 
 If the repository has no prek config, the setup audit reports it as a blocking `setup:prek-config`
 finding.

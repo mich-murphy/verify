@@ -614,8 +614,14 @@ func TestFailedHookIsOneFindingWithExcerptAndLog(t *testing.T) {
 	if _, err := os.Stat(f.Log); err != nil || f.Log != filepath.Join(out.Record.LogDir, "prek-pre-commit.log") {
 		t.Fatalf("log %q (%v), log dir %q", f.Log, err, out.Record.LogDir)
 	}
-	if len(out.Record.Findings) != 1 {
-		t.Fatalf("want exactly one finding: %+v", out.Record.Findings)
+	var blocking []string
+	for _, x := range out.Record.Findings {
+		if x.Blocking() {
+			blocking = append(blocking, x.ID)
+		}
+	}
+	if !slices.Equal(blocking, []string{"check:pre-commit:lint"}) {
+		t.Fatalf("blocking findings %v", blocking)
 	}
 	want := []string{"prek-pre-commit=fail", "prek-pre-push=skipped"}
 	if got := stepStatuses(out.Record); !slices.Equal(got, want) {
@@ -708,5 +714,41 @@ func TestStageOverBudgetAddsNoteNamingSlowestHooks(t *testing.T) {
 	f := finding(t, out.Record, "check:budget:pre-push")
 	if f.Severity != state.SeverityNote || !strings.Contains(f.Message, "vet 1.5s, ok-hook 0.3s") {
 		t.Fatalf("%+v", f)
+	}
+}
+
+// The captured fixtures cover the output format; this proves Run against the real binary.
+func TestRealPrekFailureAndFixer(t *testing.T) {
+	if _, err := exec.LookPath("prek"); err != nil {
+		t.Skip("prek missing")
+	}
+	repo := newRepo(t, head, true)
+	put(t, repo.Root, ".pre-commit-config.yaml", `repos:
+  - repo: local
+    hooks:
+      - {id: lint, name: lint, entry: ./lint.sh, language: system, pass_filenames: false, always_run: true}
+      - {id: end-of-file-fixer, name: fixer, entry: ./fix.sh, language: system, pass_filenames: false, always_run: true}
+`)
+	put(t, repo.Root, "lint.sh", "#!/bin/sh\necho 'a.go:3: bad thing'\nexit 2\n")
+	put(t, repo.Root, "fix.sh", "#!/bin/sh\nprintf x >> a.go\n")
+	for _, f := range []string{"lint.sh", "fix.sh"} {
+		if err := os.Chmod(filepath.Join(repo.Root, f), 0o700); err != nil { // #nosec G302 -- test fixture script
+			t.Fatal(err)
+		}
+	}
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-qm", "hooks")
+	out, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := finding(t, out.Record, "check:pre-commit:lint"); f.Message != "lint failed (exit 2): a.go:3: bad thing" {
+		t.Fatalf("%+v", f)
+	}
+	if f := finding(t, out.Record, "check:pre-commit:end-of-file-fixer"); f.Message != "modified a.go; run the fixer and commit" {
+		t.Fatalf("%+v", f)
+	}
+	if h := out.Record.Steps[0].Hooks; len(h) != 2 || h[0].ID != "lint" || h[0].Status != state.HookFail || h[1].Status != state.HookModified {
+		t.Fatalf("%+v", h)
 	}
 }
