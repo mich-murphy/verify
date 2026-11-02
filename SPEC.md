@@ -271,8 +271,8 @@ If `prek list` fails (for example, a remote hook repository cannot be fetched on
 the audit reports a blocking `setup:prek-config` finding that carries prek's error.
 When no prek config exists, `setup:prek-config` is the only finding for the hook obligations and the rest are implied by it.
 
-Verify does not inspect what a hook runs: no tool or registry can certify that a hook named `lint`
-lints. The assurance is that a change to the prek config is a Sign-off change (§3), so a person
+Verify does not certify what a hook runs. It reads a hook's filters and entry only to raise the
+notes above; no tool or registry can certify that a hook named `lint` lints. The assurance is that a change to the prek config is a Sign-off change (§3), so a person
 approves what each hook runs, and `verify check` runs every hook. `verify setup` prints every hook that met
 each obligation, so a mislabelled or wrongly matched hook is visible.
 

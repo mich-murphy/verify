@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -266,4 +267,33 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 		t.Fatal(err)
 	}
 	return string(out)
+}
+
+func TestShipDryRunPrintsPlanBeforeRemoteError(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	gitRun(t, e.repo, "remote", "set-url", "origin", e.origin)
+	r, code := runCLI(t, "ship", "--dry-run")
+	if code != ExitBlocked || r.Status != "blocked" {
+		t.Fatalf("exit code and status are unchanged: %d %+v", code, r)
+	}
+	var at []int
+	for _, want := range []string{
+		"push planned: git push --force-with-lease=refs/heads/feature:<remote value> origin " + e.sha + ":refs/heads/feature",
+		`pr planned: gh pr view feature --repo github.com/<owner/repo>, then gh pr create (title "change a.go", base main) or gh pr edit`,
+		"status planned: gh api --hostname github.com -X POST repos/<owner/repo>/statuses/" + e.sha + " -f state=success -f context=verify/verified",
+		"remote failed: selected remote is not a GitHub repository",
+	} {
+		i := strings.Index(r.Message, want)
+		if i < 0 {
+			t.Fatalf("message lacks %q:\n%s", want, r.Message)
+		}
+		at = append(at, i)
+	}
+	if !slices.IsSorted(at) {
+		t.Fatalf("plan lines must precede the remote error: %v\n%s", at, r.Message)
+	}
+	if e.ghCalls() != "" {
+		t.Fatal("dry run called gh")
+	}
 }
