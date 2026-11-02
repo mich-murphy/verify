@@ -603,7 +603,8 @@ func stepStatuses(rec *state.CheckRecord) []string {
 
 func TestFailedHookIsOneFindingWithExcerptAndLog(t *testing.T) {
 	stagePrek(t, map[string]stageSpec{"pre-commit": {out: lintFailure, code: 1}})
-	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	repo := newRepo(t, head, true)
+	out, err := Run(t.Context(), repo, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -611,8 +612,8 @@ func TestFailedHookIsOneFindingWithExcerptAndLog(t *testing.T) {
 	if f.Severity != state.SeverityBlock || f.Hook != "lint" || f.Message != "lint failed (exit 2): a.go:3: bad thing" || f.Excerpt != "a.go:3: bad thing\nsecond line" {
 		t.Fatalf("%+v", f)
 	}
-	if _, err := os.Stat(f.Log); err != nil || f.Log != filepath.Join(out.Record.LogDir, "prek-pre-commit.log") {
-		t.Fatalf("log %q (%v), log dir %q", f.Log, err, out.Record.LogDir)
+	if _, err := os.Stat(f.Log); err != nil || f.Log != filepath.Join(repo.CommonDir, "verify", "runs", out.Record.SHA, "logs", "1", "prek-pre-commit.log") {
+		t.Fatalf("log %q (%v)", f.Log, err)
 	}
 	var blocking []string
 	for _, x := range out.Record.Findings {
@@ -716,8 +717,8 @@ func TestEachAttemptKeepsItsOwnLogs(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := filepath.Join(logs, fmt.Sprint(attempt))
-		if out.Record.Attempt != attempt || out.Record.LogDir != want {
-			t.Fatalf("attempt %d: record has attempt %d, log dir %q, want %q", attempt, out.Record.Attempt, out.Record.LogDir, want)
+		if out.Record.Attempt != attempt {
+			t.Fatalf("attempt %d: record has attempt %d", attempt, out.Record.Attempt)
 		}
 		if _, err := os.Stat(filepath.Join(want, "prepare-deps.log")); err != nil {
 			t.Fatal(err)

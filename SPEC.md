@@ -229,8 +229,8 @@ variables of its own.
 
 The check record holds `scope` and, for `full`, the reason (`scope_reason`). `ship` accepts
 either scope: a scoped check is fast local evidence, and CI stays complete before merge. Every
-step records its exit code, its duration and a log path (`log_dir` and `attempt` on the record name
-the attempt's directory). A failed prepare step or prek stage is blocking and skips every later step.
+step records its exit code, its duration and a log path (`attempt` on the record names
+the attempt's directory, `runs/<sha>/logs/<attempt>`). A failed prepare step or prek stage is blocking and skips every later step.
 
 A failed prek stage yields one blocking `check:<stage>:<hook-id>` finding per failed hook, with
 `hook`, `log` and an `excerpt` (at most 20 lines and 2 KiB of the hook's output), and the message

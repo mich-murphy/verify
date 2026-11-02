@@ -56,23 +56,25 @@ func (s *Store) LogPath(sha, step string) (string, error) {
 	return filepath.Join(d, "logs", name+".log"), nil
 }
 
-// NewAttempt creates runs/<sha>/logs/<n> for the next check attempt n and
-// returns n with the absolute directory. Earlier attempts are never touched.
-func (s *Store) NewAttempt(sha string) (int, string, error) {
+// AttemptDir is the absolute runs/<sha>/logs/<n>, where check attempt n keeps its logs.
+func (s *Store) AttemptDir(sha string, n int) (string, error) {
 	d, err := s.RunDir(sha)
 	if err != nil {
-		return 0, "", err
+		return "", err
 	}
-	logs, err := filepath.Abs(filepath.Join(d, "logs"))
+	return filepath.Abs(filepath.Join(d, "logs", strconv.Itoa(n)))
+}
+
+// NextAttempt is the number of the next check attempt on sha. It creates nothing;
+// the caller holds check.lock, so no other attempt can claim the number first.
+func (s *Store) NextAttempt(sha string) (int, error) {
+	d, err := s.RunDir(sha)
 	if err != nil {
-		return 0, "", err
+		return 0, err
 	}
-	if err = os.MkdirAll(logs, 0o700); err != nil {
-		return 0, "", err
-	}
-	ents, err := os.ReadDir(logs)
-	if err != nil {
-		return 0, "", err
+	ents, err := os.ReadDir(filepath.Join(d, "logs"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return 0, err
 	}
 	n := 0
 	for _, e := range ents {
@@ -80,16 +82,7 @@ func (s *Store) NewAttempt(sha string) (int, string, error) {
 			n = k
 		}
 	}
-	for {
-		n++
-		dir := filepath.Join(logs, strconv.Itoa(n))
-		if err = os.Mkdir(dir, 0o700); err == nil {
-			return n, dir, nil
-		}
-		if !errors.Is(err, fs.ErrExist) {
-			return 0, "", err
-		}
-	}
+	return n + 1, nil
 }
 
 // BranchPath is branches/<branch>.json; slashes in branch names are escaped.

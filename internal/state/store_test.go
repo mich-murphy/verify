@@ -306,3 +306,24 @@ func TestLockExclusive(t *testing.T) {
 	}
 	u2()
 }
+
+func TestNextAttemptCreatesNothingAndSkipsExisting(t *testing.T) {
+	s := Open(t.TempDir())
+	n, err := s.NextAttempt(sha)
+	if err != nil || n != 1 {
+		t.Fatalf("fresh store: attempt %d, %v", n, err)
+	}
+	if _, err = os.Stat(filepath.Join(s.Dir, "runs")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("NextAttempt created state: %v", err)
+	}
+	dir, err := s.AttemptDir(sha, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if n, err = s.NextAttempt(sha); err != nil || n != 4 {
+		t.Fatalf("after attempt 3: attempt %d, %v", n, err)
+	}
+}

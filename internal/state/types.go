@@ -142,7 +142,6 @@ type CheckRecord struct {
 	Findings      []Finding `json:"findings"`
 	ConfigFromCan bool      `json:"config_from_candidate,omitempty"`
 	Attempt       int       `json:"attempt"`
-	LogDir        string    `json:"log_dir"`
 	Started       time.Time `json:"started"`
 	Finished      time.Time `json:"finished"`
 }

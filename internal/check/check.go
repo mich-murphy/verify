@@ -56,6 +56,7 @@ type runCtx struct {
 	run       *runner.Runner
 	rec       *state.CheckRecord
 	unsettled bool
+	logDir    string // this attempt's log directory, set once the worktree is ready
 }
 
 // stepRun is one finished command: its step record, stdout (what prek's hooks print) and full log text.
@@ -229,9 +230,6 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 	if err = gitx.CheckWorktreeQuarantine(wt); err != nil {
 		return err
 	}
-	if rc.rec.Attempt, rc.rec.LogDir, err = rc.store.NewAttempt(sha); err != nil {
-		return fmt.Errorf("create attempt logs: %w", err)
-	}
 	// Claim ownership before reset, audit or repository-configured commands.
 	// A crash leaves the marker, so a later invocation cannot reuse the worktree.
 	release, err := gitx.BeginWorktreeUse(wt)
@@ -245,6 +243,12 @@ func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config)
 		// Git's subprocess may still own the path after a failed/cancelled reset.
 		rc.unsettled = true
 		return fmt.Errorf("prepare worktree: %w", err)
+	}
+	if rc.rec.Attempt, err = rc.store.NextAttempt(sha); err != nil {
+		return fmt.Errorf("number attempt: %w", err)
+	}
+	if rc.logDir, err = rc.store.AttemptDir(sha, rc.rec.Attempt); err != nil {
+		return fmt.Errorf("attempt logs: %w", err)
 	}
 	rep, aerr := audit.Run(ctx, wt, cfg)
 	if aerr != nil {
@@ -411,7 +415,7 @@ func (rc *runCtx) exec(ctx context.Context, name string, argv []string, dir stri
 	sr := stepEvidence(name, r, err)
 	sr.out = r.Stdout.Output
 	if persist {
-		sr.step.Log = filepath.Join(rc.rec.LogDir, url.PathEscape(name)+".log")
+		sr.step.Log = filepath.Join(rc.logDir, url.PathEscape(name)+".log")
 		if err = state.WriteAtomic(sr.step.Log, []byte(sr.log)); err != nil {
 			return stepRun{}, err
 		}
