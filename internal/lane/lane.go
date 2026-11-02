@@ -21,6 +21,8 @@ type Change struct {
 	Path           string
 	Added, Deleted int
 	Binary         bool
+	// Exact Git tree modes, including 000000 for an absent revision.
+	OldMode, NewMode string
 }
 
 // Result is the lane with the reasons that raised it to Sign-off.
@@ -82,7 +84,7 @@ func Compute(changes []Change, cfg config.Config, configFromCandidate bool) Resu
 	lines, allDocs := 0, len(changes) > 0
 	for _, c := range changes {
 		lines += c.Added + c.Deleted
-		if !IsDocs(c.Path) {
+		if !IsDocs(c.Path) || IsBehavioral(c) || glob.MatchAny(cfg.Verify.Surfaces, c.Path) {
 			allDocs = false
 		}
 		switch {
