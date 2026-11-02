@@ -907,3 +907,27 @@ func TestSameShaRecheckIsReused(t *testing.T) {
 		t.Fatalf("%+v %v, stage runs %d", again.Record, err, stageRuns(t, calls))
 	}
 }
+
+func TestReuseStillRunsGuardsOnTheNewHistory(t *testing.T) {
+	calls, _ := slowPrek(t)
+	repo := newRepo(t, head, true)
+	if first, err := Run(t.Context(), repo, Options{}); err != nil || first.Record.Status != "pass" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	git(t, repo.Root, "checkout", "-q", "-b", "leaky", "main")
+	put(t, repo.Root, "a.go", "package a\n\n// token = "+"gh"+"p_"+"aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5\n")
+	git(t, repo.Root, "commit", "-qam", "add a token")
+	put(t, repo.Root, "a.go", "package a\n\nvar X = 1\n")
+	git(t, repo.Root, "commit", "-qam", "remove it again")
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := second.Record
+	if r.Status != "fail" || r.ReusedFrom != "" || !slices.ContainsFunc(r.Findings, func(f state.Finding) bool { return strings.HasPrefix(f.ID, "guard:secrets") }) {
+		t.Fatalf("status %s, reused from %q, findings %+v", r.Status, r.ReusedFrom, r.Findings)
+	}
+	if n := stageRuns(t, calls); n != 2 {
+		t.Fatalf("prek ran %d stages, want only the first branch's 2", n)
+	}
+}
