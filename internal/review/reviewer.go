@@ -39,14 +39,15 @@ type Reviewer interface {
 }
 
 // Select picks the reviewer. choice is auto, claude or codex; auto uses the
-// family opposite to author (claude or codex) and defaults to codex.
+// family opposite to author: author "claude" selects codex, anything else
+// (codex, empty or unknown) selects claude.
 func Select(choice, author, claudeModel, codexModel string) (Reviewer, error) {
 	switch choice {
 	case "", "auto":
-		if author == "codex" {
-			return &Claude{Model: claudeModel}, nil
+		if author == "claude" {
+			return &Codex{Model: codexModel}, nil
 		}
-		return &Codex{Model: codexModel}, nil
+		return &Claude{Model: claudeModel}, nil
 	case "claude":
 		return &Claude{Model: claudeModel}, nil
 	case "codex":

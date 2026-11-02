@@ -113,18 +113,20 @@ type CheckRecord struct {
 
 // ReviewRecord is verify.review/1.
 type ReviewRecord struct {
-	Schema    string    `json:"schema"`
-	SHA       string    `json:"sha"`
-	MergeBase string    `json:"merge_base"`
-	Branch    string    `json:"branch"`
-	Reviewer  string    `json:"reviewer"`
-	Delta     bool      `json:"delta"`
-	Status    string    `json:"status"` // pass | fail
-	Findings  []Finding `json:"findings"`
-	Resolved  []string  `json:"resolved,omitempty"`
-	Finished  time.Time `json:"finished"`
-	CallsUsed int       `json:"calls_used"`
-	Attempts  int       `json:"attempts"`
+	Schema    string `json:"schema"`
+	SHA       string `json:"sha"`
+	MergeBase string `json:"merge_base"`
+	Branch    string `json:"branch"`
+	Reviewer  string `json:"reviewer"`
+	// FallbackFrom names the family that was unavailable when auto fell back.
+	FallbackFrom string    `json:"fallback_from,omitempty"`
+	Delta        bool      `json:"delta"`
+	Status       string    `json:"status"` // pass | fail
+	Findings     []Finding `json:"findings"`
+	Resolved     []string  `json:"resolved,omitempty"`
+	Finished     time.Time `json:"finished"`
+	CallsUsed    int       `json:"calls_used"`
+	Attempts     int       `json:"attempts"`
 }
 
 // ScenarioResult is one verify scenario outcome.

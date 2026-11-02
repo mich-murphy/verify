@@ -425,8 +425,11 @@ Reviewer commands:
   Any tool or command event in the output stream invalidates the result.
 
 `VERIFY_REVIEWER` selects the reviewer; `--reviewer` overrides it. With `auto`, Verify picks the
-family other than the author's. The author's family is read from `VERIFY_AUTHOR` (`claude` or
-`codex`) or the Pi integration, and defaults to the codex reviewer. Reviewer choice is a property
+family other than the author's: author `claude` selects codex, and author `codex`, unset or
+unknown selects claude. The author is read from `VERIFY_AUTHOR` or the Pi integration. With `auto`,
+if the selected reviewer is unavailable on the first attempt, Verify tries the other family once and
+records the unavailable family as `fallback_from` in the review record; an explicit choice never falls
+back. Reviewer choice is a property
 of the person running Verify, not of the repository, so it is never read from `verify.yaml`.
 
 ### Response

@@ -45,6 +45,22 @@ func fakeReviewer(t *testing.T, outs ...string) string {
 	return counter
 }
 
+// fakeCodex installs a fake codex on PATH that answers out and counts invocations.
+func fakeCodex(t *testing.T, out string) string {
+	t.Helper()
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	counter := filepath.Join(dir, "n")
+	write(t, dir, "n", "0")
+	script := "#!/bin/sh\n/bin/cat > /dev/null\nread n < '" + counter + "'\necho $((n+1)) > '" + counter + "'\n" +
+		"while [ $# -gt 0 ]; do [ \"$1\" = -o ] && o=$2; shift; done\n" +
+		"echo '{\"type\":\"turn.completed\"}'\nprintf '%s' '" + out + "' > \"$o\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o700); err != nil { //nolint:gosec // fake executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return counter
+}
+
 func calls(t *testing.T, counter string) int {
 	t.Helper()
 	b, err := os.ReadFile(counter) //nolint:gosec // test path
@@ -374,4 +390,39 @@ func TestReviewIntentAndTooLarge(t *testing.T) {
 		t.Fatalf("%d %+v", code, r)
 	}
 	_ = repo
+}
+
+func TestReviewAutoUsesOppositeOfAuthor(t *testing.T) {
+	repo := checked(t)
+	t.Setenv("VERIFY_AUTHOR", "claude")
+	claude := fakeReviewer(t, cleanOut)
+	codex := fakeCodex(t, cleanOut)
+	_, code := runCLI(t, "review", "--reviewer", "auto")
+	rec, err := state.Open(filepath.Join(repo, ".git")).LoadReview(strings.TrimSpace(gitOut(t, repo, "rev-parse", "HEAD")))
+	if err != nil || code != ExitOK || rec.Reviewer != "codex" || rec.FallbackFrom != "" || calls(t, codex) != 1 || calls(t, claude) != 0 {
+		t.Fatalf("code %d rec %+v err %v codex %d claude %d", code, rec, err, calls(t, codex), calls(t, claude))
+	}
+}
+
+func TestReviewAutoFallsBackOnceWhenUnavailable(t *testing.T) {
+	repo := checked(t)
+	claude := fakeReviewer(t, `!{"is_error":true,"result":"Not logged in. Please run /login"}`)
+	codex := fakeCodex(t, cleanOut)
+	_, code := runCLI(t, "review", "--reviewer", "auto")
+	b := loadBranch(t, repo)
+	rec, err := state.Open(filepath.Join(repo, ".git")).LoadReview(strings.TrimSpace(gitOut(t, repo, "rev-parse", "HEAD")))
+	if err != nil || code != ExitOK || rec.Reviewer != "codex" || rec.FallbackFrom != "claude" || b.ReviewCalls != 1 ||
+		calls(t, claude) != 1 || calls(t, codex) != 1 {
+		t.Fatalf("code %d rec %+v err %v branch %+v claude %d codex %d", code, rec, err, b, calls(t, claude), calls(t, codex))
+	}
+}
+
+func TestReviewExplicitChoiceDoesNotFallBack(t *testing.T) {
+	checked(t)
+	fakeReviewer(t, `!{"is_error":true,"result":"Not logged in. Please run /login"}`)
+	codex := fakeCodex(t, cleanOut)
+	_, code := runCLI(t, "review", "--reviewer", "claude")
+	if code != ExitBlocked || calls(t, codex) != 0 {
+		t.Fatalf("code %d codex calls %d", code, calls(t, codex))
+	}
 }
