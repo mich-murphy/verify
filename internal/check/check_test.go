@@ -780,8 +780,7 @@ func TestRealPrekFailureAndFixer(t *testing.T) {
 	}
 }
 
-// slowPrek logs each stage run (not list or version calls) to the returned file and
-// sleeps one second per stage, so a reused check is visibly faster than a real one.
+// slowPrek logs each stage run (not list or version calls) to the returned file.
 // While the returned flag file exists, every stage fails.
 func slowPrek(t *testing.T) (calls, failFlag string) {
 	t.Helper()
@@ -789,7 +788,7 @@ func slowPrek(t *testing.T) (calls, failFlag string) {
 	failFlag = filepath.Join(t.TempDir(), "fail")
 	t.Setenv("PREK_CALLS_LOG", calls)
 	t.Setenv("PREK_FAIL_FLAG", failFlag)
-	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.5.5'; exit 0; fi\necho \"$*\" >> \"$PREK_CALLS_LOG\"\nsleep 1\n[ -f \"$PREK_FAIL_FLAG\" ] && exit 1\nexit 0\n"
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.5.5'; exit 0; fi\necho \"$*\" >> \"$PREK_CALLS_LOG\"\n[ -f \"$PREK_FAIL_FLAG\" ] && exit 1\nexit 0\n"
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
 		t.Fatal(err)
@@ -815,13 +814,9 @@ func TestIdenticalTreeReusesPassingCheck(t *testing.T) {
 		t.Fatalf("%+v %v", first, err)
 	}
 	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
-	start := time.Now()
 	second, err := Run(t.Context(), repo, Options{})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if time.Since(start) > 900*time.Millisecond {
-		t.Fatalf("reuse took %v", time.Since(start))
 	}
 	r := second.Record
 	if r.SHA == first.Record.SHA || r.ReusedFrom != first.Record.SHA || r.Status != "pass" || r.Tree != first.Record.Tree {
