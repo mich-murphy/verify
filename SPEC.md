@@ -156,6 +156,8 @@ The lane is a pure function of the diff from the merge-base to the SHA, plus the
 `verify check` resolves the SHA (HEAD by default), the merge-base with `base` and the lane. It then
 runs these steps in the order given in §4.1–§4.4.
 
+When a guard produces a blocking finding that no `decide accept` on the SHA covers, `verify check` records the findings and every planned step as `skipped`, prints "guards blocked; hooks skipped", and stops without entering the worktree.
+
 All steps except the guards run in a Verify-owned detached worktree of the exact SHA. Full checks
 do not check the user's uncommitted changes; `--fast` does (§4.5). If the working tree differs
 from the SHA, Verify prints a note. Repository execution must leave HEAD, the index and tracked

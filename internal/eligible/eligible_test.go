@@ -216,3 +216,10 @@ func TestEvaluate(t *testing.T) {
 		})
 	}
 }
+
+func TestAssessCheckSkippedStepIsNotPassing(t *testing.T) {
+	chk := &state.CheckRecord{Status: state.StatusFail, Steps: []state.Step{{Name: "prek-pre-commit", Status: state.StatusSkipped}}}
+	if AssessCheck(chk, nil, "s").Passing {
+		t.Fatal("a check whose hooks were skipped must not pass")
+	}
+}

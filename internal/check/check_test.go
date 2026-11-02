@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mich-murphy/verify/internal/audit"
 	"github.com/mich-murphy/verify/internal/gitx"
@@ -215,7 +216,7 @@ func TestFastPassesWorkingTreeChangesToPrek(t *testing.T) {
 	if err != nil || out.Record.Status != "pass" {
 		t.Fatalf("%+v %v", out, err)
 	}
-	b, _ := os.ReadFile(logf) // #nosec G304 -- test-owned temp path
+	b, _ := os.ReadFile(logf) // #nosec G304 -- test-owned log path // #nosec G304 -- test-owned temp path
 	got := strings.TrimSpace(string(b))
 	if !strings.HasSuffix(got, "--files a.go new.go") || strings.Contains(got, "gone.go") || strings.Contains(got, "--all-files") {
 		t.Fatalf("prek args: %q", got)
@@ -331,7 +332,7 @@ func TestPrekScopeArgs(t *testing.T) {
 	if err != nil || out.Record.Scope != ScopeAffected || out.Record.ScopeReason != "" {
 		t.Fatalf("%+v %v", out.Record, err)
 	}
-	b, _ := os.ReadFile(logf) // #nosec G304 -- test-owned temp path
+	b, _ := os.ReadFile(logf) // #nosec G304 -- test-owned log path // #nosec G304 -- test-owned temp path
 	for _, st := range []string{"pre-commit", "pre-push"} {
 		want := "run --from-ref " + out.Record.MergeBase + " --to-ref " + out.Record.SHA + " --stage " + st + " --no-progress --color never"
 		if !strings.Contains(string(b), want) || strings.Contains(string(b), "--all-files") {
@@ -350,7 +351,7 @@ func TestPrekScopeArgs(t *testing.T) {
 	if err != nil || out.Record.Scope != ScopeFull || !strings.Contains(out.Record.ScopeReason, "go.mod") {
 		t.Fatalf("%+v %v", out.Record, err)
 	}
-	b, _ = os.ReadFile(logf) // #nosec G304 -- test-owned temp path
+	b, _ = os.ReadFile(logf) // #nosec G304 -- test-owned log path // #nosec G304 -- test-owned temp path
 	if strings.Contains(string(b), "--from-ref") || strings.Count(string(b), "--all-files") != 2 {
 		t.Fatalf("full args: %q", b)
 	}
@@ -447,5 +448,104 @@ func TestCheckLogWriteFailureFailsClosed(t *testing.T) {
 	}
 	if _, err = Run(t.Context(), repo, Options{}); err == nil {
 		t.Fatal("missing log accepted")
+	}
+}
+
+func fakeSecretToken() string {
+	return "gh" + "p_" + "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5"
+}
+
+func TestBlockingGuardSkipsHooks(t *testing.T) {
+	logf := argLogPrek(t)
+	repo := newRepo(t, "prepare:\n  - {name: deps, run: [sh, -c, \"touch prepared\"]}\n", true)
+	put(t, repo.Root, "cfg.txt", "token = "+fakeSecretToken()+"\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-qm", "add secret")
+	out, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := out.Record
+	var names []string
+	for _, s := range rec.Steps {
+		if s.Status != state.StatusSkipped || s.DurationMS != 0 {
+			t.Fatalf("step not skipped: %+v", s)
+		}
+		names = append(names, s.Name)
+	}
+	if !slices.Equal(names, []string{"prepare-deps", "prek-pre-commit", "prek-pre-push"}) {
+		t.Fatalf("planned steps %v", names)
+	}
+	if rec.Status != state.StatusFail || !slices.ContainsFunc(rec.Findings, func(f state.Finding) bool { return f.Rule == "guard:secrets" }) {
+		t.Fatalf("%+v", rec)
+	}
+	if !slices.Contains(out.Notes, "guards blocked; hooks skipped") {
+		t.Fatalf("notes %v", out.Notes)
+	}
+	if _, err := os.Stat(logf); !os.IsNotExist(err) {
+		t.Fatalf("prek was invoked: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo.CommonDir, "verify", "runs", rec.SHA, "check.json")); err != nil {
+		t.Fatalf("record not saved: %v", err)
+	}
+}
+
+func TestNonBlockingGuardNoteStillRunsHooks(t *testing.T) {
+	logf := argLogPrek(t)
+	repo := newRepo(t, head, true)
+	put(t, repo.Root, ".golangci.yml", "version: \"2\"\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-qm", "quality config")
+	out, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(out.Record.Findings, func(f state.Finding) bool { return f.Rule == "guard:config" }) {
+		t.Fatalf("no config note: %+v", out.Record.Findings)
+	}
+	b, rerr := os.ReadFile(logf) // #nosec G304 -- test-owned log path
+	if rerr != nil || !strings.Contains(string(b), "--stage pre-commit") {
+		t.Fatalf("prek not run: %q %v", b, rerr)
+	}
+	for _, s := range out.Record.Steps {
+		if s.Status != state.StatusPass {
+			t.Fatalf("step %+v", s)
+		}
+	}
+}
+
+func TestAcceptedGuardFindingLetsHooksRun(t *testing.T) {
+	logf := argLogPrek(t)
+	repo := newRepo(t, head, true)
+	put(t, repo.Root, "cfg.txt", "token = "+fakeSecretToken()+"\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-qm", "add secret")
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil || first.Record.Status != state.StatusFail {
+		t.Fatalf("%+v %v", first, err)
+	}
+	var id string
+	for _, f := range first.Record.Findings {
+		if f.Rule == "guard:secrets" {
+			id = f.ID
+		}
+	}
+	err = state.Open(repo.CommonDir).UpdateBranch("feature", func(b *state.Branch) error {
+		b.Decisions = append(b.Decisions, state.Decision{Kind: state.DecideAccept, Target: id, Reason: "fixture", SHA: first.Record.SHA, Time: time.Now().UTC()})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, rerr := os.ReadFile(logf) // #nosec G304 -- test-owned log path
+	if rerr != nil || !strings.Contains(string(b), "--stage pre-push") {
+		t.Fatalf("hooks did not run after accept: %q %v", b, rerr)
+	}
+	if len(second.Record.Steps) != 2 || second.Record.Steps[0].Status != state.StatusPass {
+		t.Fatalf("%+v", second.Record.Steps)
 	}
 }
