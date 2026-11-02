@@ -1,0 +1,11 @@
+error: Failed to parse `.pre-commit-config.yaml`
+  caused by: error: line 13 column 35: mapping values are not allowed in this context
+  --> <input>:13:35
+   |
+11 |         name: lint things
+12 |         language: system
+13 |         entry: sh -c 'echo "a.go:3: bad thing"; echo "second line"; exit 2'
+   |                                   ^ mapping values are not allowed in this context
+14 |         pass_filenames: false
+15 |         always_run: true
+   |

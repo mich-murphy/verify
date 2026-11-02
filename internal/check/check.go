@@ -25,6 +25,9 @@ const prekTimeout = 30 * time.Minute
 // fastTierBudget is the SPEC §4.5 pre-commit budget; a variable so tests can lower it.
 var fastTierBudget = 5 * time.Second
 
+// fullTierBudget is the SPEC §4.5 pre-push budget; a variable so tests can lower it.
+var fullTierBudget = 20 * time.Second
+
 // Options selects what to check.
 type Options struct {
 	Ref  string // commit-ish; default HEAD

@@ -91,7 +91,7 @@ func TestPrepareRunsFirstAndFailureSkipsRest(t *testing.T) {
 	bad := "prepare:\n  - {name: deps, run: [sh, -c, \"exit 1\"]}\n"
 	repo := newRepo(t, bad, true)
 	out, err = Run(t.Context(), repo, Options{})
-	if err != nil || out.Record.Status != "fail" || len(out.Record.Steps) != 1 {
+	if err != nil || out.Record.Status != "fail" || len(out.Record.Steps) != 3 {
 		t.Fatalf("%+v %v", out.Record, err)
 	}
 	if f := out.Record.Findings; !slices.ContainsFunc(f, func(x state.Finding) bool { return x.ID == "check:prepare-deps" }) {
@@ -396,8 +396,8 @@ func TestFullStageTrackedMutationCannotPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if _, err := Run(t.Context(), repo, Options{}); err == nil || !strings.Contains(err.Error(), "tracked worktree/index differs") {
-		t.Fatalf("stage mutation accepted: %v", err)
+	if _, err := Run(t.Context(), repo, Options{}); err == nil || !strings.Contains(err.Error(), "tracked worktree/index differs") || !strings.Contains(err.Error(), "a.go") {
+		t.Fatalf("stage mutation accepted or unnamed: %v", err)
 	}
 }
 
@@ -547,5 +547,166 @@ func TestAcceptedGuardFindingLetsHooksRun(t *testing.T) {
 	}
 	if len(second.Record.Steps) != 2 || second.Record.Steps[0].Status != state.StatusPass {
 		t.Fatalf("%+v", second.Record.Steps)
+	}
+}
+
+const (
+	lintFailure  = "lint things.....................................................................................Failed\n- hook id: lint\n- duration: 0.40s\n- exit code: 2\n\n  a.go:3: bad thing\n  second line\n"
+	fixerFailure = "fix eof.........................................................................................Failed\n- hook id: end-of-file-fixer\n- duration: 0.01s\n- files were modified by this hook\n"
+	slowHooks    = "ok hook.........................................................................................Passed\n- hook id: ok-hook\n- duration: 0.32s\n\nvet.............................................................................................Passed\n- hook id: vet\n- duration: 1.50s\n"
+)
+
+// stageSpec scripts what the fake prek does for one stage: run sh in the
+// worktree, print out, then exit with code.
+type stageSpec struct {
+	sh, out string
+	code    int
+}
+
+func stagePrek(t *testing.T, specs map[string]stageSpec) {
+	t.Helper()
+	dir := t.TempDir()
+	for stage, sp := range specs {
+		for ext, content := range map[string]string{"sh": sp.sh, "out": sp.out, "exit": fmt.Sprint(sp.code)} {
+			if err := os.WriteFile(filepath.Join(dir, stage+"."+ext), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	t.Setenv("PREK_FAKE_DIR", dir)
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nstage=\nwhile [ $# -gt 0 ]; do [ \"$1\" = --stage ] && stage=$2; shift; done\nd=\"$PREK_FAKE_DIR\"\n[ -f \"$d/$stage.sh\" ] && sh \"$d/$stage.sh\"\n[ -f \"$d/$stage.out\" ] && cat \"$d/$stage.out\"\n[ -f \"$d/$stage.exit\" ] && exit \"$(cat \"$d/$stage.exit\")\"\nexit 0\n"
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func finding(t *testing.T, rec *state.CheckRecord, id string) state.Finding {
+	t.Helper()
+	for _, f := range rec.Findings {
+		if f.ID == id {
+			return f
+		}
+	}
+	t.Fatalf("no finding %s in %+v", id, rec.Findings)
+	return state.Finding{}
+}
+
+func stepStatuses(rec *state.CheckRecord) []string {
+	var out []string
+	for _, s := range rec.Steps {
+		out = append(out, s.Name+"="+s.Status)
+	}
+	return out
+}
+
+func TestFailedHookIsOneFindingWithExcerptAndLog(t *testing.T) {
+	stagePrek(t, map[string]stageSpec{"pre-commit": {out: lintFailure, code: 1}})
+	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := finding(t, out.Record, "check:pre-commit:lint")
+	if f.Severity != state.SeverityBlock || f.Hook != "lint" || f.Message != "lint failed (exit 2): a.go:3: bad thing" || f.Excerpt != "a.go:3: bad thing\nsecond line" {
+		t.Fatalf("%+v", f)
+	}
+	if _, err := os.Stat(f.Log); err != nil || f.Log != filepath.Join(out.Record.LogDir, "prek-pre-commit.log") {
+		t.Fatalf("log %q (%v), log dir %q", f.Log, err, out.Record.LogDir)
+	}
+	if len(out.Record.Findings) != 1 {
+		t.Fatalf("want exactly one finding: %+v", out.Record.Findings)
+	}
+	want := []string{"prek-pre-commit=fail", "prek-pre-push=skipped"}
+	if got := stepStatuses(out.Record); !slices.Equal(got, want) {
+		t.Fatalf("steps %v want %v", got, want)
+	}
+}
+
+func TestPrekErrorKeepsStageFindingWithExcerpt(t *testing.T) {
+	stagePrek(t, map[string]stageSpec{"pre-commit": {out: "error: Failed to parse `.pre-commit-config.yaml`\n", code: 2}})
+	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := finding(t, out.Record, "check:prek-pre-commit")
+	if f.Hook != "" || !strings.Contains(f.Excerpt, "Failed to parse") || f.Log == "" {
+		t.Fatalf("%+v", f)
+	}
+}
+
+func TestFixerRewriteIsAFindingNotAnAbort(t *testing.T) {
+	stagePrek(t, map[string]stageSpec{"pre-commit": {sh: "printf x >> a.go", out: fixerFailure, code: 1}})
+	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil {
+		t.Fatalf("fixer rewrite aborted the check: %v", err)
+	}
+	f := finding(t, out.Record, "check:pre-commit:end-of-file-fixer")
+	if f.Severity != state.SeverityBlock || f.Hook != "end-of-file-fixer" || f.Message != "modified a.go; run the fixer and commit" {
+		t.Fatalf("%+v", f)
+	}
+	want := []string{"prek-pre-commit=fail", "prek-pre-push=skipped"}
+	if got := stepStatuses(out.Record); !slices.Equal(got, want) || out.Record.Status != "fail" {
+		t.Fatalf("steps %v want %v, status %s", got, want, out.Record.Status)
+	}
+}
+
+func TestFailedPrepareRecordsLaterStepsAsSkipped(t *testing.T) {
+	fakePrek(t)
+	out, err := Run(t.Context(), newRepo(t, "prepare:\n  - {name: deps, run: [sh, -c, \"echo boom >&2; exit 1\"]}\n", true), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"prepare-deps=fail", "prek-pre-commit=skipped", "prek-pre-push=skipped"}
+	if got := stepStatuses(out.Record); !slices.Equal(got, want) {
+		t.Fatalf("steps %v want %v", got, want)
+	}
+	if s := out.Record.Steps[1]; s.DurationMS != 0 || s.ExitCode != 0 {
+		t.Fatalf("skipped step %+v", s)
+	}
+	f := finding(t, out.Record, "check:prepare-deps")
+	if !strings.Contains(f.Excerpt, "boom") || f.Log == "" {
+		t.Fatalf("%+v", f)
+	}
+}
+
+func TestEachAttemptKeepsItsOwnLogs(t *testing.T) {
+	fakePrek(t)
+	repo := newRepo(t, "prepare:\n  - {name: deps, run: [sh, -c, \"exit 1\"]}\n", true)
+	sha, err := repo.Head(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := filepath.Join(repo.CommonDir, "verify", "runs", sha, "logs")
+	for attempt := 1; attempt <= 2; attempt++ {
+		out, err := Run(t.Context(), repo, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := filepath.Join(logs, fmt.Sprint(attempt))
+		if out.Record.Attempt != attempt || out.Record.LogDir != want {
+			t.Fatalf("attempt %d: record has attempt %d, log dir %q, want %q", attempt, out.Record.Attempt, out.Record.LogDir, want)
+		}
+		if _, err := os.Stat(filepath.Join(want, "prepare-deps.log")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(logs, "1", "prepare-deps.log")); err != nil {
+		t.Fatalf("attempt 1 log overwritten or removed: %v", err)
+	}
+}
+
+func TestStageOverBudgetAddsNoteNamingSlowestHooks(t *testing.T) {
+	stagePrek(t, map[string]stageSpec{"pre-push": {out: slowHooks}})
+	old := fullTierBudget
+	fullTierBudget = -1
+	t.Cleanup(func() { fullTierBudget = old })
+	out, err := Run(t.Context(), newRepo(t, head, true), Options{})
+	if err != nil || out.Record.Status != "pass" {
+		t.Fatalf("%+v %v", out, err)
+	}
+	f := finding(t, out.Record, "check:budget:pre-push")
+	if f.Severity != state.SeverityNote || !strings.Contains(f.Message, "vet 1.5s, ok-hook 0.3s") {
+		t.Fatalf("%+v", f)
 	}
 }

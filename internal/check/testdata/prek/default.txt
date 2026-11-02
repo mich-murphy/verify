@@ -1,0 +1,10 @@
+ok hook..................................................................Passed
+lint things..............................................................Failed
+- hook id: lint
+- exit code: 2
+
+  a.go:3: bad thing
+  second line
+fix eof..................................................................Failed
+- hook id: end-of-file-fixer
+- files were modified by this hook
