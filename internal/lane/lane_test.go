@@ -38,7 +38,10 @@ func TestCompute(t *testing.T) {
 		{"other internal", []Change{c("internal/lane/x.go", 1, 0)}, false, Standard},
 		{"at line limit", []Change{c("a.go", 300, 100)}, false, Standard},
 		{"over line limit", []Change{c("a.go", 300, 101)}, false, Signoff},
-		{"docs over limit", []Change{c("a.md", 401, 0)}, false, Signoff},
+		{"markdown over limit", []Change{c("a.md", 452, 0)}, false, Docs},
+		{"markdown over limit plus prek config", []Change{c("a.md", 452, 0), c(".pre-commit-config.yaml", 1, 0)}, false, Signoff},
+		{"executable script under docs", []Change{{Path: "docs/run", Added: 100, OldMode: "000000", NewMode: "100755"}}, false, Standard},
+		{"source over limit under docs", []Change{c("docs/a.go", 401, 0)}, false, Signoff},
 		{"candidate config", []Change{c("a.go", 1, 0)}, true, Signoff},
 		{"candidate config docs", []Change{c("a.md", 1, 0)}, true, Signoff},
 	}
