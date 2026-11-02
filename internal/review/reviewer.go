@@ -162,6 +162,9 @@ type Claude struct {
 	Model   string
 	Bin     string // default "claude"
 	Timeout time.Duration
+	// Capture, when set, receives the CLI's complete stdout wrapper. Only the
+	// evaluation harness sets it.
+	Capture func(wrapper []byte)
 }
 
 // Name implements Reviewer.
@@ -229,6 +232,9 @@ type Codex struct {
 	Model   string
 	Bin     string // default "codex"
 	Timeout time.Duration
+	// Capture, when set, receives the CLI's JSONL event stream. Only the
+	// evaluation harness sets it.
+	Capture func(wrapper []byte)
 }
 
 // Name implements Reviewer.

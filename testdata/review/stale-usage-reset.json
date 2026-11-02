@@ -6,8 +6,14 @@
   "OracleSHA256": "4ac52fc1201f16e9c87fe6f92f23d92bbf570998919e38326c85f06ce065430f",
   "BeforePass": true,
   "AfterPass": false,
-  "Truth": "A new usage window must not retain the previous window's credits.",
-  "Expect": "Find the stale-credit regression.",
+  "Why": "A new usage window must not retain the previous window's credits.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -9,7 +9,6 @@\n func (u *Usage) Update(window, credits int) {\n \tif u.Window != window {\n \t\tu.Window = window\n-\t\tu.Credits = 0\n \t}\n \tu.Credits += credits\n }\n",
     "Messages": [

@@ -6,8 +6,14 @@
   "OracleSHA256": "ca5c5f0265ebfa8cfa4989557c02f734f7b34ceb1520c33a22f831031f74dad2",
   "BeforePass": true,
   "AfterPass": false,
-  "Truth": "A previously resolved empty-name bug is reintroduced and merits a new finding.",
-  "Expect": "Identify the recurrence despite the resolved prior disposition.",
+  "Why": "A previously resolved empty-name bug is reintroduced and merits a new finding.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -1,4 +1,4 @@\n package fixture\n \n // ValidName rejects an empty name.\n-func ValidName(name string) bool { return name != \"\" }\n+func ValidName(name string) bool { return true }\n",
     "Messages": [

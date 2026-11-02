@@ -1,39 +1,64 @@
 package review
 
 import (
-	"cmp"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-var (
-	reviewEval       = flag.String("review-eval", "", "opt-in subscription reviewer: codex or claude")
-	reviewEvalOutput = flag.String("review-eval-output", "", "new JSON output file (required for live evaluation)")
-	reviewEvalCase   = flag.String("review-eval-case", "", "one case ID, or all eight when empty")
-)
-
-type corpusCase struct {
-	ID, Path, BeforeSHA256, AfterSHA256, OracleSHA256, Truth, Expect string
-	BeforePass, AfterPass                                            bool
-	Input                                                            Input
+// Expect is the scored answer for one case. Either Findings is "none" (a
+// silent case) or Path, Kind, Blocking and Repro describe the one finding the
+// reviewer must report. Resolved is the exact set of open IDs the diff fixes.
+type Expect struct {
+	Path     string   `json:"path,omitempty"`
+	Kind     string   `json:"kind,omitempty"`
+	Blocking bool     `json:"blocking,omitempty"`
+	Repro    bool     `json:"repro,omitempty"`
+	Findings string   `json:"findings,omitempty"`
+	Resolved []string `json:"resolved"`
 }
 
-var corpusIDs = []string{
-	"stale-usage-reset", "excess-cache-markers", "authorization-removal", "optout-redirect",
-	"repair-open-f1", "clean-correctness-fix", "accepted-unchanged", "resolved-recurrence",
+func (e Expect) silent() bool { return e.Findings == "none" }
+
+func (e Expect) validate() error {
+	switch {
+	case e.Resolved == nil:
+		return errors.New("resolved is required (use [] for none)")
+	case e.silent():
+		if e.Path != "" || e.Kind != "" || e.Blocking || e.Repro {
+			return errors.New(`findings "none" excludes path, kind, blocking and repro`)
+		}
+	case e.Findings != "":
+		return fmt.Errorf("findings must be \"none\" or omitted, got %q", e.Findings)
+	case e.Path == "" || !slices.Contains(Kinds, e.Kind):
+		return fmt.Errorf("a required finding needs a path and a known kind, got %q %q", e.Path, e.Kind)
+	case e.Blocking && (e.Kind != "correctness" || !e.Repro):
+		return errors.New("only a correctness finding with a repro can block")
+	}
+	return nil
+}
+
+// corpusCase is one testdata/review/<id>.json manifest. Why is for humans and
+// is never sent to a reviewer.
+type corpusCase struct {
+	ID, Path, BeforeSHA256, AfterSHA256, OracleSHA256, Why string
+	BeforePass, AfterPass                                  bool
+	Expect                                                 Expect
+	Input                                                  Input
 }
 
 // fixtureBytes limits reads to the corpus tree; a manifest cannot name a path
@@ -89,12 +114,21 @@ func TestFixtureReadLimit(t *testing.T) {
 
 func loadCorpus(t *testing.T) []corpusCase {
 	t.Helper()
-	cases := make([]corpusCase, 0, len(corpusIDs))
-	for _, id := range corpusIDs {
-		data := fixtureBytes(t, id+".json")
+	manifests, err := filepath.Glob(filepath.Join("..", "..", "testdata", "review", "*.json"))
+	if err != nil || len(manifests) == 0 {
+		t.Fatalf("no corpus manifests: %v", err)
+	}
+	cases := make([]corpusCase, 0, len(manifests))
+	for _, manifest := range manifests {
+		id := strings.TrimSuffix(filepath.Base(manifest), ".json")
+		dec := json.NewDecoder(bytes.NewReader(fixtureBytes(t, id+".json")))
+		dec.DisallowUnknownFields()
 		var c corpusCase
-		if err := json.Unmarshal(data, &c); err != nil {
-			t.Fatal(err)
+		if err := dec.Decode(&c); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if err := c.Expect.validate(); err != nil {
+			t.Fatalf("%s: %v", id, err)
 		}
 		if c.ID != id {
 			t.Fatalf("case ID %q differs from filename %q", c.ID, id)
@@ -221,20 +255,32 @@ func runOracle(t *testing.T, source, oracle []byte, wantPass bool) {
 	}
 }
 
+// oracleMatchesExpect: a required finding means the change breaks the oracle
+// (which passed before, unless an open finding already described the bug); a
+// silent case may fix or preserve behavior but never break it.
+func oracleMatchesExpect(c corpusCase) bool {
+	if c.Expect.silent() {
+		return c.AfterPass || !c.BeforePass
+	}
+	return !c.AfterPass && (c.BeforePass || len(c.Input.Open) > 0)
+}
+
 func validateCorpus(t *testing.T) []corpusCase {
 	t.Helper()
 	cases := loadCorpus(t)
 	for _, c := range cases {
 		t.Run(c.ID, func(t *testing.T) {
-			if c.Path != "fixture.go" || c.Truth == "" || c.Expect == "" {
+			if c.Path != "fixture.go" || c.Why == "" {
 				t.Fatal("missing source or ground truth")
 			}
-			wantBefore, wantAfter := true, false
-			if c.ID == "repair-open-f1" || c.ID == "clean-correctness-fix" || c.ID == "accepted-unchanged" {
-				wantBefore, wantAfter = false, true
+			if !oracleMatchesExpect(c) {
+				t.Fatal("oracle verdicts do not match the expected behavior")
 			}
-			if c.BeforePass != wantBefore || c.AfterPass != wantAfter {
-				t.Fatal("oracle verdicts do not match behavioral category")
+			open := openIDs(c.Input)
+			for _, id := range c.Expect.Resolved {
+				if !slices.Contains(open, id) {
+					t.Fatalf("expected resolved %s is not open", id)
+				}
 			}
 			before := sourceFile(t, c.ID, "before.go", c.BeforeSHA256)
 			after := sourceFile(t, c.ID, "after.go", c.AfterSHA256)
@@ -246,20 +292,15 @@ func validateCorpus(t *testing.T) []corpusCase {
 			if err != nil || string(applied) != string(after) {
 				t.Fatalf("diff does not produce after source: %v", err)
 			}
-			if c.ID == "repair-open-f1" && (len(c.Input.Open) != 1 || c.Input.Open[0].ID != "F1" || len(c.Input.Prior) != 0) {
-				t.Fatal("repair requires open F1")
-			}
-			if c.ID == "accepted-unchanged" && (len(c.Input.Prior) != 1 || c.Input.Prior[0].State != "accepted") {
-				t.Fatal("accepted finding missing")
-			}
-			if c.ID == "resolved-recurrence" && (len(c.Input.Prior) != 1 || c.Input.Prior[0].State != "resolved") {
-				t.Fatal("resolved finding missing")
-			}
 			packet, err := Build(c.Input)
 			if err != nil || len(packet) > 8192 {
 				t.Fatalf("packet size/build: %d bytes: %v", len(packet), err)
 			}
-			for _, secret := range []string{c.Truth, c.Expect, c.BeforeSHA256, c.AfterSHA256, c.OracleSHA256, "oracle_test.go", "=== GROUND TRUTH ==="} {
+			expect, err := json.Marshal(c.Expect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, secret := range []string{c.Why, string(expect), c.BeforeSHA256, c.AfterSHA256, c.OracleSHA256, "oracle_test.go", "=== GROUND TRUTH ==="} {
 				if strings.Contains(string(packet), secret) {
 					t.Fatalf("ground truth or oracle leaked into reviewer packet")
 				}
@@ -296,110 +337,5 @@ func TestReplayDiffRejectsWrongSourceAndHunks(t *testing.T) {
 				t.Fatal("invalid diff applied")
 			}
 		})
-	}
-}
-
-type evaluationObservation struct {
-	Case, Reviewer, RequestedModel, PromptSHA256, PacketSHA256, Raw, Duration string
-	Usage                                                                     Usage
-	Error                                                                     string `json:"error,omitempty"`
-}
-
-// TestReviewLiveEvaluation does not invoke any reviewer without explicit flags.
-func TestReviewLiveEvaluation(t *testing.T) {
-	if *reviewEval == "" {
-		t.Log("live review disabled; supply -review-eval=codex|claude and -review-eval-output=NEW_FILE")
-		return
-	}
-	if *reviewEvalOutput == "" || (*reviewEval != "codex" && *reviewEval != "claude") {
-		t.Fatal("live review requires -review-eval=codex|claude and -review-eval-output=NEW_FILE")
-	}
-	claudeModel := cmp.Or(os.Getenv("VERIFY_CLAUDE_MODEL"), "opus")
-	codexModel := os.Getenv("VERIFY_CODEX_MODEL")
-	reviewer, err := Select(*reviewEval, "", claudeModel, codexModel)
-	if err != nil {
-		t.Fatal(err)
-	}
-	model := cmp.Or(codexModel, "CLI default")
-	if *reviewEval == "claude" {
-		model = claudeModel
-	}
-	type prepared struct {
-		c      corpusCase
-		packet []byte
-	}
-	var cases []prepared
-	for _, c := range validateCorpus(t) {
-		if *reviewEvalCase != "" && c.ID != *reviewEvalCase {
-			continue
-		}
-		packet, buildErr := Build(c.Input)
-		if buildErr != nil {
-			t.Fatal(buildErr)
-		}
-		cases = append(cases, prepared{c, packet})
-	}
-	if len(cases) == 0 {
-		t.Fatalf("unknown case %q", *reviewEvalCase)
-	}
-	// Reserve and test the destination BEFORE any charged calls.
-	out, err := os.OpenFile(*reviewEvalOutput, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if closeErr := out.Close(); closeErr != nil {
-			t.Error(closeErr)
-		}
-	}()
-	var results []evaluationObservation
-	persist := func() {
-		t.Helper()
-		encoded, encodeErr := json.MarshalIndent(results, "", "  ")
-		if encodeErr != nil {
-			t.Fatal(encodeErr)
-		}
-		if err := out.Truncate(0); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := out.Seek(0, 0); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := out.Write(append(encoded, '\n')); err != nil {
-			t.Fatal(err)
-		}
-		if err := out.Sync(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	persist()
-	for _, p := range cases {
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
-		start := time.Now()
-		raw, usage, runErr := reviewer.Run(ctx, p.packet)
-		cancel()
-		packetSum := sha256.Sum256(p.packet)
-		promptSum := sha256.Sum256(append([]byte(SystemPrompt+"\n\n=== PACKET ===\n"), p.packet...))
-		obs := evaluationObservation{
-			Case: p.c.ID, Reviewer: reviewer.Name(), RequestedModel: model,
-			PromptSHA256: hex.EncodeToString(promptSum[:]), PacketSHA256: hex.EncodeToString(packetSum[:]),
-			Raw: string(raw), Duration: time.Since(start).String(), Usage: usage,
-		}
-		if runErr != nil {
-			obs.Error = runErr.Error()
-		} else {
-			open := make([]string, 0, len(p.c.Input.Open))
-			for _, f := range p.c.Input.Open {
-				open = append(open, f.ID)
-			}
-			if _, parseErr := Parse(raw, open, []string{p.c.Path}); parseErr != nil {
-				obs.Error = fmt.Sprintf("response validation: %v", parseErr)
-			}
-		}
-		results = append(results, obs)
-		persist()
-		if obs.Error != "" {
-			t.Errorf("%s: %s (raw response saved)", p.c.ID, obs.Error)
-		}
 	}
 }

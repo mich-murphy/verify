@@ -6,8 +6,14 @@
   "OracleSHA256": "812543d91a1c6dd0bf1d447f930fb285b2cf82b72b67d1dc53a7c78a838a3db6",
   "BeforePass": true,
   "AfterPass": false,
-  "Truth": "Opting out must suppress the redirect.",
-  "Expect": "Find the opt-out regression.",
+  "Why": "Opting out must suppress the redirect.",
+  "Expect": {
+    "path": "fixture.go",
+    "kind": "correctness",
+    "blocking": true,
+    "repro": true,
+    "resolved": []
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,8 +2,5 @@\n \n // Redirect returns the destination only when redirection is enabled.\n func Redirect(enabled bool, destination string) string {\n-\tif !enabled {\n-\t\treturn \"\"\n-\t}\n \treturn destination\n }\n",
     "Messages": [

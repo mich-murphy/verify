@@ -6,8 +6,13 @@
   "OracleSHA256": "812543d91a1c6dd0bf1d447f930fb285b2cf82b72b67d1dc53a7c78a838a3db6",
   "BeforePass": false,
   "AfterPass": true,
-  "Truth": "The repair restores opt-out behavior and should resolve open F1.",
-  "Expect": "Resolve F1 without inventing a new defect.",
+  "Why": "The repair restores opt-out behavior and should resolve open F1.",
+  "Expect": {
+    "findings": "none",
+    "resolved": [
+      "F1"
+    ]
+  },
   "Input": {
     "Diff": "diff --git a/fixture.go b/fixture.go\n--- a/fixture.go\n+++ b/fixture.go\n@@ -2,5 +2,8 @@\n \n // Redirect returns the destination only when redirection is enabled.\n func Redirect(enabled bool, destination string) string {\n+\tif !enabled {\n+\t\treturn \"\"\n+\t}\n \treturn destination\n }\n",
     "Messages": [
