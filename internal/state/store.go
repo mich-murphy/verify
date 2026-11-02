@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ErrCorrupt marks a record that exists but cannot be trusted.
@@ -100,9 +101,15 @@ func (s *Store) Lock(ctx context.Context) (func(), error) {
 	return LockFile(ctx, filepath.Join(s.Dir, "lock"))
 }
 
+// lockPoll is how often a contended LockFile retries.
+const lockPoll = 250 * time.Millisecond
+
 // LockFile takes an exclusive flock on path (creating it and its directory)
-// and returns the unlock function. It blocks until the lock is free.
-func LockFile(_ context.Context, path string) (func(), error) {
+// and returns the unlock function. While another process holds the lock it
+// prints one line naming the holder to stderr, then retries until the lock is
+// free or ctx is done, in which case it returns ctx.Err(). The holder writes
+// its pid into the file after acquiring.
+func LockFile(ctx context.Context, path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // #nosec G703 -- Verify-owned lock path.
 		return nil, err
 	}
@@ -110,14 +117,47 @@ func LockFile(_ context.Context, path string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil { // #nosec G115 -- fd fits int.
+	fd := int(f.Fd()) // #nosec G115 -- fd fits int.
+	for waited := false; ; waited = true {
+		err = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			_ = f.Close()
+			return nil, err
+		}
+		if !waited {
+			_, _ = fmt.Fprintf(os.Stderr, "waiting for %s held by %s\n", filepath.Base(path), holder(f))
+		}
+		select {
+		case <-ctx.Done():
+			_ = f.Close()
+			return nil, ctx.Err()
+		case <-time.After(lockPoll):
+		}
+	}
+	if err = f.Truncate(0); err == nil {
+		_, err = f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0)
+	}
+	if err != nil {
+		_ = syscall.Flock(fd, syscall.LOCK_UN)
 		_ = f.Close()
 		return nil, err
 	}
 	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) // #nosec G115 -- fd fits int.
+		_ = f.Truncate(0) // a stale pid would mislead the next waiter
+		_ = syscall.Flock(fd, syscall.LOCK_UN)
 		_ = f.Close()
 	}, nil
+}
+
+func holder(f *os.File) string {
+	b, err := io.ReadAll(io.NewSectionReader(f, 0, 32))
+	if pid, aerr := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && aerr == nil && pid > 0 {
+		return "pid " + strconv.Itoa(pid)
+	}
+	return "another verify process"
 }
 
 // WriteAtomic writes data to path via temp file, fsync, rename and directory fsync.
