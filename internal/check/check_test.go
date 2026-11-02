@@ -915,6 +915,35 @@ func TestSameShaRecheckReturnsThePassedRecordUnchanged(t *testing.T) {
 	}
 }
 
+func TestSameShaRecheckOfAReusedRecordSaysAlreadyPassed(t *testing.T) {
+	slowPrek(t)
+	repo := newRepo(t, head, true)
+	first, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "commit", "-q", "--allow-empty", "-m", "same tree")
+	reused, err := Run(t.Context(), repo, Options{})
+	if err != nil || reused.Record.ReusedFrom != first.Record.SHA {
+		t.Fatalf("%+v %v", reused.Record, err)
+	}
+	path := filepath.Join(repo.CommonDir, "verify", "runs", reused.Record.SHA, "check.json")
+	before, err := os.ReadFile(path) // #nosec G304 -- test-owned state path
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := Run(t.Context(), repo, Options{})
+	if err != nil || again.Record.SHA != reused.Record.SHA || again.Record.ReusedFrom != first.Record.SHA {
+		t.Fatalf("%+v %v", again.Record, err)
+	}
+	if !slices.Contains(again.Notes, "check already passed for this commit") || slices.ContainsFunc(again.Notes, func(n string) bool { return strings.HasPrefix(n, "reused check from") }) {
+		t.Fatalf("notes %q", again.Notes)
+	}
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) { // #nosec G304 -- test-owned state path
+		t.Fatalf("record rewritten: %v\n%s\n%s", err, before, after)
+	}
+}
+
 func TestOldPassIsNotReused(t *testing.T) {
 	calls, _ := slowPrek(t)
 	repo := newRepo(t, head, true)
