@@ -102,6 +102,20 @@ func TestHookNotes(t *testing.T) {
 			},
 		},
 		{
+			name: "scope: a files filter on a subdirectory that holds tracked typescript",
+			files: map[string]string{
+				"package.json": tsRepo, "package-lock.json": "{}", "tsconfig.json": `{}`,
+				"tools/ci/src/index.ts": "export {}\n",
+				".pre-commit-config.yaml": hookYAML(
+					"      - {id: lint, name: lint, entry: npm run lint, language: system, files: '^tools/ci/', types_or: [ts], stages: [pre-commit]}\n",
+					"      - {id: format, name: format, entry: npm run fmt, language: system, files: '^nothing/', stages: [pre-commit]}\n",
+				),
+			},
+			want: map[string]string{
+				"setup:format:scope": "hook format: its files/types filters cannot match any typescript file, so it never checks this project",
+			},
+		},
+		{
 			name: "always-run on a pre-push hook",
 			files: tsFiles(hookYAML(
 				"      - {id: typecheck, name: t, entry: npm run typecheck, language: system, always_run: true, stages: [pre-push]}\n",
