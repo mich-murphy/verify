@@ -45,6 +45,10 @@ func TestUncached(t *testing.T) {
 		"go test -shuffle=on -race ./...":     true,
 		"go test -race -count=10 ./...":       false,
 		"go test -race ./...":                 false,
+		"go test -shuffle ./...":              true,
+		"go test -shuffle=12345 ./...":        true,
+		"go test -shuffle=off ./...":          false,
+		"go test -shuffle=off -count=1 ./...": true,
 		"sh -c 'go test -count=1 ./... && x'": true,
 	} {
 		if got := Uncached(cmd); got != want {
