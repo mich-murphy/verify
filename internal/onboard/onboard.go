@@ -214,14 +214,22 @@ type def struct {
 
 var tsTypes = []string{"javascript", "jsx", "ts", "tsx", "json"}
 
+// prek ANDs files with types, so a hook that must also run on manifest or
+// linter-config changes states every path in one files regex and no types.
+const (
+	goSources    = `\.go$|(^|/)go\.(mod|sum)$`
+	goLintInputs = `\.go$|(^|/)\.golangci\.(yml|yaml|toml|json)$|(^|/)\.golangci-lint-version$`
+	tsTestInputs = `\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|json)$|(^|/)(bun\.lockb?|pnpm-lock\.yaml|yarn\.lock)$`
+)
+
 var goDefs = map[string]def{
-	"format":     {starter: "golangci-lint fmt --diff", types: []string{"go"}},
-	"lint":       {starter: "golangci-lint run", types: []string{"go"}},
-	"tidy":       {starter: "go mod tidy -diff", files: `(^|/)go\.(mod|sum)$`},
-	"test":       {starter: "go test -race ./...", types: []string{"go"}},
-	"coverage":   {starter: "sh -c 'go test -race -coverprofile=coverage.out ./... && go-test-coverage --config=.testcoverage.yml'", types: []string{"go"}},
-	"deadcode":   {starter: `sh -c 'out=$(deadcode -test ./...) || exit $?; test -z "$out" || { echo "$out"; exit 1; }'`, types: []string{"go"}},
-	"vuln":       {starter: "govulncheck ./...", types: []string{"go"}},
+	"format":     {starter: "golangci-lint fmt --diff", files: goLintInputs},
+	"lint":       {starter: "golangci-lint run", files: goLintInputs},
+	"tidy":       {starter: "go mod tidy -diff", files: goSources},
+	"test":       {starter: "go test -race ./...", files: goSources},
+	"coverage":   {starter: "sh -c 'go test -race -coverprofile=coverage.out ./... && go-test-coverage --config=.testcoverage.yml'", files: goSources},
+	"deadcode":   {starter: `sh -c 'out=$(deadcode -test ./...) || exit $?; test -z "$out" || { echo "$out"; exit 1; }'`, files: goSources},
+	"vuln":       {starter: "govulncheck ./...", files: goSources},
 	"actionlint": {starter: "actionlint", files: `^\.github/workflows/`},
 }
 
@@ -229,7 +237,7 @@ var tsDefs = map[string]def{
 	"format":     {starter: "oxfmt --check", tool: "oxfmt", types: tsTypes, filenames: true},
 	"lint":       {starter: "oxlint --report-unused-disable-directives-severity=error", tool: "oxlint", types: tsTypes[:4], filenames: true},
 	"typecheck":  {starter: "tsc --noEmit", tool: "typescript", types: tsTypes},
-	"test":       {starter: "vitest run", tool: "vitest", types: tsTypes},
+	"test":       {starter: "vitest run", tool: "vitest", files: tsTestInputs},
 	"actionlint": goDefs["actionlint"],
 }
 
