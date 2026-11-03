@@ -52,7 +52,7 @@ func TestGoSetupAudit(t *testing.T) {
 	if code != 0 || r.Status != "pass" || !strings.Contains(r.Message, "test: ok (hook test)") {
 		t.Fatalf("code=%d %+v", code, r)
 	}
-	if contains(r.rules(), "setup:test") || contains(r.rules(), "setup:format") {
+	if slices.Contains(r.rules(), "setup:test") || slices.Contains(r.rules(), "setup:format") {
 		t.Fatalf("unexpected findings %v", r.rules())
 	}
 }

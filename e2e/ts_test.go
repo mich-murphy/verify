@@ -32,16 +32,16 @@ func requireNodeTypeStripping(t *testing.T) {
 	t.Helper()
 	out, err := exec.CommandContext(t.Context(), "node", "--version").Output() // #nosec G204 -- fixed command
 	if err != nil {
-		t.Skip("node not on PATH")
+		unavailable(t, "node not on PATH")
 	}
 	m := regexp.MustCompile(`^v(\d+)\.(\d+)`).FindStringSubmatch(string(out))
 	if m == nil {
-		t.Skipf("unrecognised node version %q", out)
+		unavailable(t, "unrecognised node version %q", out)
 	}
 	major, _ := strconv.Atoi(m[1])
 	minor, _ := strconv.Atoi(m[2])
 	if major < 22 || major == 22 && minor < 18 {
-		t.Skipf("node %s does not strip types by default", strings.TrimSpace(string(out)))
+		unavailable(t, "node %s does not strip types by default", strings.TrimSpace(string(out)))
 	}
 }
 
@@ -52,7 +52,7 @@ func TestTSSetupAudit(t *testing.T) {
 	if code != 0 || r.Status != "pass" || !strings.Contains(r.Message, "typecheck: ok (hook typecheck)") || !strings.Contains(r.Message, "test: ok (hook test)") {
 		t.Fatalf("code=%d %+v", code, r)
 	}
-	if !contains(r.rules(), "setup:hook-tiers") {
+	if !slices.Contains(r.rules(), "setup:hook-tiers") {
 		t.Fatalf("typecheck at pre-commit should raise the hook-tiers note: %v", r.rules())
 	}
 }
