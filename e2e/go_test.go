@@ -28,7 +28,7 @@ func prekConfig(hooks ...string) string {
 	return s
 }
 
-const goTestCmd = "go test ./... && false"
+const goTestCmd = "go test ./..."
 
 func goFixture(dir string) map[string]string {
 	return map[string]string{

@@ -56,6 +56,10 @@ does not build against the newer release that other tools pull in. Drop the
 - Table-driven tests. Test behaviour, not implementation.
   `make test` and `make cover` unset `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`, which git exports to
   hooks in a linked worktree and which would send a test's `git -C <tmpdir>` into the real repository.
+- `e2e/` holds end-to-end tests that build `cmd/verify` and run it as a subprocess on Go and
+  TypeScript fixture repositories, with real git and prek. The package skips when `prek` is not
+  on PATH, and its TypeScript tests skip on node older than 22.18. Run it alone with
+  `go test -count=1 ./e2e/`.
 - Fail closed: a missing tool, corrupt record or unknown config key is an error,
   never a pass.
 - Records are `/1`. No schema version stacks and no migrations.
