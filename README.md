@@ -1,10 +1,15 @@
 # Verify
 
 Verify is a local command-line tool for one developer working with AI coding agents.
-It checks every commit with your repository's own tools plus a few guards of its
-own. It then asks one fresh reviewer for a review, exercises the command-line
-behaviour you changed, and pushes only the exact commit it checked. The author
-(you or your agent) fixes whatever Verify finds. Verify only reports.
+It runs your repository's own prek hooks plus a few guards on the exact commit, asks
+one fresh reviewer for a review, exercises the command-line behaviour you changed, and
+pushes only the commit it checked. The author (you or your agent) fixes whatever
+Verify finds. Verify only reports.
+
+Verify picks a lane from the diff. `docs` is for documentation-only changes, `standard`
+is the default, and `signoff` needs a human `verify decide approve`. Guards run before
+hooks, and a blocking guard skips them. A passing check on an identical tree is reused.
+A failed hook is one finding, `check:<stage>:<hook>`.
 
 Verify is cooperative: its `verify/verified` status guards against forgetting, not
 against a determined attacker. macOS and Linux, GitHub only.
@@ -40,8 +45,8 @@ the `gh` CLI. Reviews use the `claude` or `codex` subscription CLIs, chosen by `
 3. Commit, then:
 
    ```
-   verify setup    # audit the repo's quality setup; prints fixes, edits nothing
-   verify check    # guards, setup audit and your checks, on the exact commit
+   verify setup    # audit the repo's quality setup; prints notes and fixes, edits nothing
+   verify check    # guards, setup audit and your hooks, on the exact commit
    verify review   # one fresh review of the change
    verify ship     # push the commit, open the PR, set verify/verified
    ```
@@ -54,15 +59,19 @@ Exit codes: `0` passed, `1` blocking findings, `2` usage or config error,
 
 | Command | Purpose |
 |---|---|
-| `verify check [--sha REF] [--fast]` | Run guards, the setup audit and repository checks. |
+| `verify check [--sha REF] [--fast]` | Run guards, the setup audit and repository hooks. Reuses a passing check for an identical tree. |
 | `verify review [--intent FILE] [--reviewer auto\|claude\|codex]` | One fresh review, or a delta review after a repair. |
 | `verify verify` | Run configured CLI scenarios when a declared surface changed. |
 | `verify ship [--dry-run] [--remote NAME]` | Push the checked commit, open or update the PR, set `verify/verified`. |
 | `verify decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current commit. |
-| `verify status` | Show the lane, results, open findings and the next action. |
-| `verify setup [--apply]` | Static audit of the quality setup, with guidance; `--apply` onboards the repo. |
+| `verify status` | Show the lane, results, open findings and the next action. Exits 1 when findings block and 3 when blocked. |
+| `verify setup [--apply]` | Audit the quality setup with notes on hook scope, always-run and uncacheable hooks. Without prek config it prints the YAML that `--apply` would write. |
 | `verify doctor` | Check tool availability and noninteractive gh/reviewer authentication status. |
 | `verify agent-hook` | Read an agent tool call on stdin; exit 2 to block hook bypasses. |
+
+## Measured
+
+Timings, coverage, mutation score and the live reviewer run are in [STATUS.md](STATUS.md).
 
 ## Upgrading from Gate
 
