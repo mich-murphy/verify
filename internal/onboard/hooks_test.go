@@ -69,8 +69,13 @@ func TestRefusesUncachedCoverHookAndPreviewEqualsWrittenFile(t *testing.T) {
 	if !strings.Contains(written, `"make fmt-check"`) {
 		t.Fatalf("cacheable hooks must still be written:\n%s", written)
 	}
-	if len(res.Findings) != 1 || res.Findings[0].ID != "setup:coverage" || res.Findings[0].Severity != "block" || res.Findings[0].Message != refusal {
+	if len(res.Findings) != 2 {
 		t.Fatalf("findings = %+v", res.Findings)
+	}
+	for i, id := range []string{"setup:test", "setup:coverage"} {
+		if f := res.Findings[i]; f.ID != id || f.Severity != "block" || f.Message != refusal {
+			t.Fatalf("finding %d = %+v, want %s with the refusal", i, f, id)
+		}
 	}
 }
 
