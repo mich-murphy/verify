@@ -66,6 +66,6 @@ Notes on the table.
 - Verify is cooperative. It is not a hostile-code sandbox, an autonomous repair agent or a CI, merge or deploy service.
 - The e2e package skips locally when `prek` is missing and fails closed when `CI` is set. Its TypeScript tests skip on node older than 22.18.
 - Remote CI is the approval for a merge. Local results are not.
-- A Linux race run, cold filesystem cache and real shipping are not qualified (`docs/battle-testing.md`).
+- Live reviewer accuracy beyond the seeded corpus, real shipping and a cold filesystem cache are not qualified (`docs/battle-testing.md`).
 - On a docs-lane change, always-run `typecheck` and `test` hooks still run, so pi-extensions takes 92.03 s until its dogfood PR lands.
 - Branch protection and integration activation are explicit user steps.
