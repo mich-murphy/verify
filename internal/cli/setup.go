@@ -78,6 +78,11 @@ func setupResult(root string, rep audit.Report, applied []string, refused []stat
 		return Result{}, err
 	}
 	msg := strings.Join(append(applied, "profile: "+rep.Profile, renderAudit(rep)), "\n")
+	if !applying {
+		for _, f := range plan.Findings {
+			msg += "\nnot written: " + f.Message
+		}
+	}
 	if !applying && plan.Text != "" {
 		msg += "\nwould write " + filepath.Base(plan.Path) + ":\n" + plan.Text
 	}
