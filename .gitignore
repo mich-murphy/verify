@@ -10,3 +10,4 @@ mutation.json
 __pycache__/
 *.pyc
 .verify-eval/
+**/testdata/rapid/*.fail

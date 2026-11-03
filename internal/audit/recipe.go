@@ -44,7 +44,7 @@ func definesTarget(line, target string) bool {
 	return strings.Contains(" "+strings.Join(strings.Fields(line[:i]), " ")+" ", " "+target+" ")
 }
 
-var uncachedFlag = regexp.MustCompile(`(^|\s)-(count=1|shuffle)\b`)
+var uncachedFlag = regexp.MustCompile(`(^|\s)-(count=1|shuffle(=(on|\d+))?)([\s'"]|$)`)
 
 // Uncached reports whether a command carries -count=1 or -shuffle, which stop
 // the Go test cache from replaying a pass.
