@@ -7,7 +7,22 @@ import (
 	"testing"
 )
 
-func TestMain(m *testing.M) { os.Exit(Main(m)) }
+func TestMain(m *testing.M) {
+	for _, k := range gitVars {
+		_ = os.Setenv(k, "/nonexistent")
+	}
+	os.Exit(Main(m))
+}
+
+var gitVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"}
+
+func TestMainUnsetsGitRepositoryVariables(t *testing.T) {
+	for _, k := range gitVars {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Errorf("%s still set to %q", k, v)
+		}
+	}
+}
 
 func TestMainPointsHomeConfigAndTmpdirAtOneFreshRealDirectory(t *testing.T) {
 	home := os.Getenv("HOME")
