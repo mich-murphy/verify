@@ -40,6 +40,26 @@ func samples(goP, tsP bool, tsDir string) []sample {
 	return out
 }
 
+// projectFiles returns the repository's Go and TypeScript files, tracked or
+// not yet added, so a hook filtered to a subdirectory is judged by real paths.
+func (a *auditor) projectFiles(goP, tsP bool) []sample {
+	// #nosec G204 -- fixed git arguments; a.dir is the audited repository
+	cmd := exec.CommandContext(a.ctx, "git", "-C", a.dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil // the fixed samples still apply
+	}
+	var res []sample
+	for _, p := range strings.Split(string(out), "\x00") {
+		tag := map[string]string{".go": "go", ".ts": "ts", ".tsx": "tsx"}[path.Ext(p)]
+		if tag == "" || tag == "go" && !goP || tag != "go" && !tsP {
+			continue
+		}
+		res = append(res, sample{p, []string{"file", "text", tag}})
+	}
+	return res
+}
+
 // reaches reports whether the hook's files, exclude and types filters admit
 // the sample. An unparsable regex admits it: prek's dialect may differ.
 func (h hook) reaches(s sample) bool {
@@ -72,6 +92,11 @@ func (a *auditor) note(hookID, reason, msg string) {
 // that meet obligation r.
 func (a *auditor) ruleNotes(r rule, lvl string, ms []hook, goP, tsP bool) {
 	smp := samples(goP, tsP, a.tsDir)
+	if !a.sampled {
+		a.sampled = true
+		a.repoSamples = a.projectFiles(goP, tsP)
+	}
+	smp = append(smp, a.repoSamples...)
 	var langs []string
 	if goP {
 		langs = append(langs, "go")
