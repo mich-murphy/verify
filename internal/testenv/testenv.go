@@ -8,10 +8,10 @@ import (
 )
 
 // Main runs a package's tests with HOME, XDG_CONFIG_HOME and TMPDIR pointing at a
-// fresh real-path directory and unsets the variables git exports to hooks from a
-// linked worktree, which would send a test's git commands at the real repository. Call it from TestMain: os.Exit(testenv.Main(m)).
-// Without it, a symlinked global git config or ignore file, or a /var to
-// /private/var TMPDIR, changes what the tests see.
+// fresh real-path directory, and unsets GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE,
+// which git exports to hooks from a linked worktree. Call it from TestMain:
+// os.Exit(testenv.Main(m)). Without it, a symlinked global git config or ignore
+// file, a /var to /private/var TMPDIR, or those variables change what the tests see.
 func Main(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "verify-test-home-")
 	if err == nil {
