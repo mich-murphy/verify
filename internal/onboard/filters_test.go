@@ -123,7 +123,7 @@ func TestTypeScriptTestHookSelectsLockfileChanges(t *testing.T) {
 	if !ok {
 		t.Fatalf("no test hook:\n%s", written)
 	}
-	for p, want := range map[string]bool{"bun.lock": true, "pnpm-lock.yaml": true, "package.json": true, "src/a.ts": true, "README.md": false} {
+	for p, want := range map[string]bool{"bun.lock": true, "pnpm-lock.yaml": true, "package.json": true, "package-lock.json": true, "web/package-lock.json": true, "yarn.lock": true, "src/a.ts": true, "README.md": false} {
 		if got := h.selects(p); got != want {
 			t.Errorf("test selects %s = %v, want %v (files=%q types_or=%v)", p, got, want, h.Files, h.TypesOr)
 		}

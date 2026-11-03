@@ -219,7 +219,7 @@ var tsTypes = []string{"javascript", "jsx", "ts", "tsx", "json"}
 const (
 	goSources    = `\.go$|(^|/)go\.(mod|sum)$`
 	goLintInputs = `\.go$|(^|/)\.golangci\.(yml|yaml|toml|json)$|(^|/)\.golangci-lint-version$`
-	tsTestInputs = `\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|json)$|(^|/)(bun\.lockb?|pnpm-lock\.yaml|yarn\.lock)$`
+	tsTestInputs = `\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|json)$|(^|/)(package\.json|package-lock\.json|bun\.lockb?|pnpm-lock\.yaml|yarn\.lock)$`
 )
 
 var goDefs = map[string]def{
