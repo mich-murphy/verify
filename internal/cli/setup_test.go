@@ -125,3 +125,13 @@ func TestSetupWithoutPrekConfigReportsOneFindingAndPreviewsTheFile(t *testing.T)
 		t.Fatal("lefthook.yml changed")
 	}
 }
+
+func TestSetupPreviewTextExplainsTheRefusedUncachedTarget(t *testing.T) {
+	memoryRepo(t)
+	var out, errb bytes.Buffer
+	Run([]string{"setup"}, strings.NewReader(""), &out, &errb)
+	const want = "make cover runs tests uncached (-count=1 or -shuffle); add a cacheable target such as `test-hook: go test -race ./...` and rerun verify setup --apply"
+	if !strings.Contains(out.String(), want) {
+		t.Fatalf("text output lacks the refusal:\n%s", out.String())
+	}
+}
