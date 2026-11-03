@@ -58,10 +58,14 @@ func IsDocs(p string) bool {
 }
 
 // IsQualityConfig reports whether a path is verify, prek, lint, format, type,
-// coverage or CI configuration.
+// coverage or CI configuration. A documentation file is not, unless it sits
+// under .github/workflows/.
 func IsQualityConfig(p string) bool {
 	if strings.HasPrefix(p, ".github/workflows/") {
 		return true
+	}
+	if IsDocs(p) {
+		return false
 	}
 	base := path.Base(p)
 	for _, b := range qualityBases {
