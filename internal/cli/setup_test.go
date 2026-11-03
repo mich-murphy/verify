@@ -135,3 +135,18 @@ func TestSetupPreviewTextExplainsTheRefusedUncachedTarget(t *testing.T) {
 		t.Fatalf("text output lacks the refusal:\n%s", out.String())
 	}
 }
+
+func TestSetupTestFindingCarriesTheRefusalWhenCoverIsTheOnlyCandidate(t *testing.T) {
+	memoryRepo(t)
+	r, _ := runCLI(t, "setup", "--apply")
+	const want = "make cover runs tests uncached (-count=1 or -shuffle); add a cacheable target such as `test-hook: go test -race ./...` and rerun verify setup --apply"
+	var got []string
+	for _, f := range r.Findings {
+		if f.Rule == "setup:test" {
+			got = append(got, f.Message)
+		}
+	}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("setup:test findings %q, want one saying %q", got, want)
+	}
+}
