@@ -57,8 +57,8 @@ Notes on the table.
 - The sessioncapture and syncer tests in memory still miss the 20 s budget. In the replay `pre-push took 410.9s, over the 20s budget`. This is memory work.
 - The three dogfood PRs (pi-extensions, memory, businesscraft) are landed by each repo's owner. Verify's findings go back to the authoring agent.
 - The codex corpus run waited on quota until 4 Nov. It has not run.
-- A queued check does not re-read the record after it gets the lock, so it reruns every hook on a SHA the holder just passed (`docs/evidence/replay.md`, open gap). No fix is in review.
-- The `setup:test` finding says `verify setup --apply` writes the hook while apply refuses the only hook that could satisfy it (`docs/evidence/replay.md`, observations). No fix is in review.
+- A queued check does not re-read the record after it gets the lock, so it reruns every hook on a SHA the holder just passed (`docs/evidence/replay.md`, open gap). Fix in review, PR #25.
+- The `setup:test` finding says `verify setup --apply` writes the hook while apply refuses the only hook that could satisfy it (`docs/evidence/replay.md`, observations). Fix in review, PR #25.
 - The tag v1.0.0 is created by the owner.
 
 ## Known limits
