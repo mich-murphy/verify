@@ -111,6 +111,9 @@ type auditor struct {
 
 	tsDir string // TypeScript project directory relative to dir
 	notes []Note
+
+	sampled     bool
+	repoSamples []sample
 }
 
 // Run audits dir.
