@@ -10,6 +10,8 @@ const { execFileSync } = require('node:child_process');
 const pkg = process.env.PI_PACKAGE;
 
 test('registered tool_call and agent_end feed bounded real Verify feedback', { skip: !pkg && 'set PI_PACKAGE to installed Pi SDK' }, async () => {
+  const meta = require(path.join(pkg, 'package.json'));
+  assert.equal(meta.name, '@earendil-works/pi-coding-agent', 'PI_PACKAGE must be the installed Pi package');
   const root = mkdtempSync(path.join(tmpdir(), 'verify-pi-'));
   try {
     const bin = path.join(root, 'bin');
@@ -31,7 +33,7 @@ test('registered tool_call and agent_end feed bounded real Verify feedback', { s
     const originalPath = process.env.PATH;
     process.env.PATH = `${bin}${path.delimiter}${originalPath}`;
     try {
-      const { createJiti } = require(path.join(pkg, 'node_modules/jiti'));
+      const { createJiti } = require(require.resolve('jiti', { paths: [pkg] }));
       const factory = createJiti(__filename)(path.join(__dirname, 'verify.ts')).default;
       const handlers = {};
       const sent = [];

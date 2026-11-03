@@ -63,8 +63,10 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 	cmd.Stdin = bytes.NewReader(t.Stdin)
 	cmd.Env = env
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	// Bound inherited output pipe lifetimes when a parent exits before its child.
-	cmd.WaitDelay = 50 * time.Millisecond
+	// Bound inherited output pipe lifetimes when a parent exits before its child. It must
+	// outlast scheduler stalls under load: 50ms failed healthy concurrent git calls with
+	// "WaitDelay expired before I/O complete" about 3 times in 100 runs.
+	cmd.WaitDelay = 2 * time.Second
 	stdout, stderr := newCapture(r.config.OutputLimit), newCapture(r.config.OutputLimit)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

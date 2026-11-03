@@ -40,7 +40,7 @@ func TestRunnerHelper(t *testing.T) {
 	case "fail":
 		os.Exit(7)
 	case "delayedfail":
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(3 * time.Second)
 		os.Exit(7)
 	case "sleep":
 		d, err := time.ParseDuration(args[at+1])

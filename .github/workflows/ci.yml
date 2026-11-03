@@ -41,6 +41,14 @@ jobs:
           install-only: true
           cache: false
       - run: make ci
+      - name: Install pinned Pi package
+        if: runner.os == 'Linux'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pi" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@1.4.0
+          echo "PI_PACKAGE=$RUNNER_TEMP/pi/node_modules/@earendil-works/pi-coding-agent" >> "$GITHUB_ENV"
+      - name: Pi harness
+        if: runner.os == 'Linux'
+        run: node --test integrations/pi/verify.test.cjs
 
   required:
     name: CI complete
