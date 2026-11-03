@@ -13,7 +13,7 @@ const tsFilter = "types_or: [ts, javascript]"
 
 func tsFixture(dir string) map[string]string {
 	return map[string]string{
-		"package.json":       "{\n  \"name\": \"fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test src/\",\n    \"typecheck\": \"node --check src/index.ts\"\n  }\n}\n",
+		"package.json":       "{\n  \"name\": \"fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test src/index.test.mjs\",\n    \"typecheck\": \"node --check src/index.ts\"\n  }\n}\n",
 		"package-lock.json":  "{\n  \"name\": \"fixture\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"fixture\",\n      \"version\": \"1.0.0\"\n    }\n  }\n}\n",
 		"tsconfig.json":      "{\n  \"compilerOptions\": {\n    \"strict\": true,\n    \"noUncheckedIndexedAccess\": true,\n    \"exactOptionalPropertyTypes\": true,\n    \"noEmit\": true,\n    \"allowImportingTsExtensions\": true\n  },\n  \"include\": [\"src\"]\n}\n",
 		"src/index.ts":       "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
@@ -22,7 +22,7 @@ func tsFixture(dir string) map[string]string {
 		"verify.yaml":        waivers("format", "lint", "lint-unused-directives"),
 		".pre-commit-config.yaml": prekConfig(
 			hook(dir, "typecheck", "pre-commit", "node --check src/index.ts", tsFilter),
-			hook(dir, "test", "pre-push", "node --test src/", tsFilter),
+			hook(dir, "test", "pre-push", "node --test src/index.test.mjs", tsFilter),
 		),
 	}
 }
