@@ -41,7 +41,7 @@ Evidence for every row is in `docs/evidence/`, session records copied on 2026-11
 | Check reuse, memory warm check | 365.37 s | 0.36 s | `docs/evidence/replay.md` (a)4, m6 |
 | Fixture-only change | false green in 0.55 s | caught, check fails in 427.87 s | `docs/evidence/replay.md` (a)9, m7 |
 | Onboarding on memory | 11 findings, 9 blocking | 1 blocking plus a hook-manager note | `docs/evidence/replay.md` (a)7, m0 |
-| Total coverage | 85.5 % (previous STATUS.md at 9fbd2a8) | 86.6 % | `docs/evidence/acceptance.md`, stack C and d18; floors stay 80 % total, 70 % per package |
+| Total coverage | 86.4 % (previous STATUS.md at 9fbd2a8, its latest figure) | 86.6 % | `docs/evidence/acceptance.md`, stack C and d18; floors stay 80 % total, 70 % per package |
 | Mutation, lane | not run | 10 killed, 0 lived, 6 not covered (100 % efficacy, 62.5 % of all) | `docs/battle-testing.md`, Mutation |
 | Reviewer corpus, live claude | unevaluated | 20 of 20 cases pass | `docs/evidence/reviewer-live-run.md`, PR #17 |
 | Replay of 34 experiments | not applicable | 11 intended differences, 0 regressions | `docs/evidence/replay.md` |
