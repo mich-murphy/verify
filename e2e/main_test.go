@@ -37,7 +37,7 @@ var (
 func binary(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("prek"); err != nil {
-		t.Skip("prek not on PATH")
+		unavailable(t, "prek not on PATH")
 	}
 	buildOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "verify-e2e-bin-")
@@ -65,3 +65,12 @@ type buildFailure struct {
 }
 
 func (b *buildFailure) Error() string { return "go build: " + b.err.Error() + "\n" + b.out }
+
+// unavailable skips locally but fails when CI is set, so CI cannot silently skip the package.
+func unavailable(t *testing.T, format string, args ...any) {
+	t.Helper()
+	if os.Getenv("CI") != "" {
+		t.Fatalf(format, args...)
+	}
+	t.Skipf(format, args...)
+}

@@ -172,12 +172,3 @@ func (f *fixture) hookRan() bool {
 	_, err := os.Stat(f.marker())
 	return err == nil
 }
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
