@@ -2,7 +2,7 @@
 GOTOOL := go tool -modfile=tools/go.mod
 GOFILES = $$(git ls-files --cached --others --exclude-standard --deduplicate '*.go' | while IFS= read -r file; do if [ -f "$$file" ]; then printf '%s\n' "$$file"; fi; done)
 
-.PHONY: build fmt fmt-check lint vet tidy-check test cover deadcode vuln secrets secrets-staged actionlint check ci review-eval
+.PHONY: build fmt fmt-check lint vet tidy-check test cover deadcode vuln secrets secrets-staged actionlint check ci review-eval mutate
 
 build:
 	go build -o bin/verify ./cmd/verify
@@ -32,6 +32,13 @@ test:
 # CI uses one shuffled, uncached race+coverage run. The pre-push hook passes
 # TESTFLAGS= so Go's test cache applies (SPEC §4.5 full-tier rules).
 TESTFLAGS ?= -shuffle=on -count=1
+
+MUTATE_PKGS ?= eligible lane guard check review
+
+# Mutation testing is slow and runs outside CI. Each package must kill at least
+# the efficacy threshold in .gremlins.yaml; every package runs before the target fails.
+mutate:
+	@rc=0; for p in $(MUTATE_PKGS); do echo "== internal/$$p"; $(GOTOOL) gremlins unleash ./internal/$$p || rc=1; done; exit $$rc
 
 cover:
 	env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE go test -race $(TESTFLAGS) -coverprofile=coverage.out ./...
