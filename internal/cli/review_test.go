@@ -443,3 +443,13 @@ func TestStatusHasNoBranchReviewBudget(t *testing.T) {
 		t.Fatalf("status lost the attempts line:\n%s", out.String())
 	}
 }
+
+func TestReviewRunMakesAtMostTwoCallsAcrossFallbackAndRetry(t *testing.T) {
+	checked(t)
+	claude := fakeReviewer(t, `!{"is_error":true,"result":"Not logged in. Please run /login"}`)
+	codex := fakeCodex(t, `{"nope":1}`)
+	_, code := runCLI(t, "review", "--reviewer", "auto")
+	if code != ExitBlocked || calls(t, claude)+calls(t, codex) != 2 {
+		t.Fatalf("code %d claude %d codex %d, want 2 calls in the run", code, calls(t, claude), calls(t, codex))
+	}
+}
