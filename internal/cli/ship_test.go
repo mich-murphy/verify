@@ -297,3 +297,103 @@ func TestShipDryRunPrintsPlanBeforeRemoteError(t *testing.T) {
 		t.Fatal("dry run called gh")
 	}
 }
+
+const createGHScript = `#!/bin/sh
+echo "$*" >> "$GH_LOG"
+case "$1 $2" in
+"pr view") exit 1 ;;
+"pr create")
+	while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cat "$2" > "$GH_BODY"; shift; done
+	echo https://example.test/pr/9
+	;;
+esac
+exit 0
+`
+
+// shipCreatesPR makes gh report no existing PR and keep the body it was given.
+func (e *shipEnv) shipCreatesPR(t *testing.T) (body func() string) {
+	t.Helper()
+	bin := filepath.Dir(e.ghLog)
+	write(t, bin, "gh", createGHScript)
+	if err := os.Chmod(filepath.Join(bin, "gh"), 0o700); err != nil { //nolint:gosec // fake executable in a temp dir
+		t.Fatal(err)
+	}
+	bodyFile := filepath.Join(bin, "body.md")
+	t.Setenv("GH_BODY", bodyFile)
+	return func() string {
+		b, _ := os.ReadFile(bodyFile) //nolint:gosec // test path
+		return string(b)
+	}
+}
+
+const describeOut = `{"title":"Add the greeting","description":"Users now see a greeting on start. It exists so first runs feel welcome."}`
+
+func TestShipOpensReadyPRWithGeneratedTitleAndDescription(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	body := e.shipCreatesPR(t)
+	fakeReviewer(t, describeOut)
+	if r, code := runCLI(t, "ship"); code != 0 {
+		t.Fatalf("ship: %d %+v", code, r)
+	}
+	create := ""
+	for _, l := range strings.Split(e.ghCalls(), "\n") {
+		if strings.HasPrefix(l, "pr create") {
+			create = l
+		}
+	}
+	if !strings.Contains(create, "--title Add the greeting --body-file") || strings.Contains(create, "--draft") {
+		t.Fatalf("create args: %q", create)
+	}
+	if !strings.HasPrefix(body(), "Users now see a greeting on start. It exists so first runs feel welcome.\n\n## Verify\n") {
+		t.Fatalf("body:\n%s", body())
+	}
+}
+
+func TestShipFallsBackToCommitMessagesWhenReviewerFails(t *testing.T) {
+	e := newShipEnv(t)
+	commit(t, e.repo, "b.go", "package a\n\nvar Y = 1\n")
+	e.sha = strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "HEAD"))
+	e.records(t, "standard", true)
+	body := e.shipCreatesPR(t)
+	fakeReviewer(t, `!{"is_error":true,"result":"Not logged in. Please run /login"}`)
+	if r, code := runCLI(t, "ship"); code != 0 {
+		t.Fatalf("ship: %d %+v", code, r)
+	}
+	if !strings.Contains(e.ghCalls(), "--title feature: change b.go --body-file") {
+		t.Fatalf("title: %s", e.ghCalls())
+	}
+	want := "change a.go\nchange b.go\n\nDescription generated from commit messages (reviewer CLI unavailable)\n\n## Verify\n"
+	if !strings.HasPrefix(body(), want) {
+		t.Fatalf("body:\n%s", body())
+	}
+}
+
+func TestShipRerunOnTheSameSHACallsNoReviewer(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	e.shipCreatesPR(t)
+	counter := fakeReviewer(t, describeOut)
+	for range 2 {
+		if r, code := runCLI(t, "ship"); code != 0 {
+			t.Fatalf("ship: %d %+v", code, r)
+		}
+	}
+	if n := calls(t, counter); n != 1 {
+		t.Fatalf("reviewer invoked %d times for two ships of one SHA, want 1", n)
+	}
+	b := loadBranch(t, e.repo)
+	if b.ReviewAttempts != 0 || b.Description == nil || b.Description.Source != "claude" || b.Description.SHA != e.sha {
+		t.Fatalf("description must be cached without touching the review budget: %+v", b)
+	}
+}
+
+func TestShipDryRunPrintsPlannedTitleWithoutCallingReviewer(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	counter := fakeReviewer(t, describeOut)
+	r, code := runCLI(t, "ship", "--dry-run")
+	if code != 0 || calls(t, counter) != 0 || !strings.Contains(r.Message, `title "change a.go"`) || !strings.Contains(r.Message, `description "change a.go"`) {
+		t.Fatalf("%d calls %d %+v", code, calls(t, counter), r)
+	}
+}
