@@ -59,7 +59,7 @@ does not build against the newer release that other tools pull in. Drop the
 - `e2e/` holds end-to-end tests that build `cmd/verify` and run it as a subprocess on Go and
   TypeScript fixture repositories, with real git and prek. Without `prek` on PATH the package skips locally and fails when
   `CI` is set. Its TypeScript tests skip on node older than 22.18. Run it alone with
-  `go test -count=1 ./e2e/`.
+  `go test -count=1 ./e2e/`. Timing assertions compare against a full check measured in the same run (a reuse or short-circuit must be faster than it), with a 30 s ceiling for hangs.
 - Fail closed: a missing tool, corrupt record or unknown config key is an error,
   never a pass.
 - Records are `/1`. No schema version stacks and no migrations.
