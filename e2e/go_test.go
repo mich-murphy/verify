@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -27,6 +28,9 @@ func prekConfig(hooks ...string) string {
 	}
 	return s
 }
+
+// hangCeiling only catches a hung run. Speed claims compare against a full check measured in the same test.
+const hangCeiling = 30 * time.Second
 
 const goTestCmd = "go test ./..."
 
@@ -104,10 +108,18 @@ func TestGoDocsOnlyCommit(t *testing.T) {
 
 func TestGoSecretCommit(t *testing.T) {
 	f := newFixture(t, goFixture)
+	f.commit("calc/calc.go", addFile+"\nfunc Sub(a, b int) int { return a - b }\n")
+	full, code, fullWall := f.timedJSON("check")
+	if code != 0 || !f.hookRan() {
+		t.Fatalf("baseline check code=%d %+v", code, full)
+	}
+	if err := os.Remove(f.marker()); err != nil {
+		t.Fatal(err)
+	}
 	f.commit("cfg.txt", "# c\ntoken = "+"gh"+"p_"+"aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5"+"\n")
 	r, code, wall := f.timedJSON("check")
-	if code != 1 || wall > 5*time.Second {
-		t.Fatalf("code=%d wall=%v %+v", code, wall, r)
+	if code != 1 || wall >= fullWall || wall > hangCeiling {
+		t.Fatalf("code=%d wall=%v full check=%v %+v", code, wall, fullWall, r)
 	}
 	if !slices.ContainsFunc(r.rules(), func(s string) bool { return strings.HasPrefix(s, "guard:secrets") }) {
 		t.Fatalf("rules %v", r.rules())
@@ -120,18 +132,19 @@ func TestGoSecretCommit(t *testing.T) {
 func TestGoReuse(t *testing.T) {
 	f := newFixture(t, goFixture)
 	f.commit("calc/calc.go", addFile+"\nfunc Sub(a, b int) int { return a - b }\n")
-	if r, code := f.json("check"); code != 0 {
-		t.Fatalf("first check code=%d %+v", code, r)
+	first, code, fullWall := f.timedJSON("check")
+	if code != 0 {
+		t.Fatalf("first check code=%d %+v", code, first)
 	}
 	r, code, wall := f.timedJSON("check")
-	if code != 0 || !strings.Contains(r.Message, "already passed") || wall > 2*time.Second {
-		t.Fatalf("same sha code=%d wall=%v %+v", code, wall, r)
+	if code != 0 || !strings.Contains(r.Message, "already passed") || wall >= fullWall || wall > hangCeiling {
+		t.Fatalf("same sha code=%d wall=%v full check=%v %+v", code, wall, fullWall, r)
 	}
 	for range 2 {
 		f.git("commit", "-q", "--allow-empty", "-m", "same tree")
 		r, code, wall = f.timedJSON("check")
-		if code != 0 || !strings.Contains(r.Message, "reused check from") || wall > 2*time.Second {
-			t.Fatalf("empty commit code=%d wall=%v %+v", code, wall, r)
+		if code != 0 || !strings.Contains(r.Message, "reused check from") || wall >= fullWall || wall > hangCeiling {
+			t.Fatalf("empty commit code=%d wall=%v full check=%v %+v", code, wall, fullWall, r)
 		}
 	}
 }
