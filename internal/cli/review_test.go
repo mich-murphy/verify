@@ -131,7 +131,7 @@ func TestReviewPassAndBlockAndDelta(t *testing.T) {
 		t.Fatalf("%d %+v", code, r)
 	}
 	b := loadBranch(t, repo)
-	if b.ReviewCalls != 1 || b.LastReviewedSHA != r.SHA {
+	if b.ReviewAttempts != 1 || b.LastReviewedSHA != r.SHA {
 		t.Fatalf("%+v", b)
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
@@ -141,19 +141,8 @@ func TestReviewPassAndBlockAndDelta(t *testing.T) {
 		t.Fatalf("%d %+v", code, r)
 	}
 	b = loadBranch(t, repo)
-	if b.ReviewCalls != 2 || b.Findings[0].State != state.StateResolved || calls(t, counter) != 2 {
+	if b.ReviewAttempts != 2 || b.Findings[0].State != state.StateResolved || calls(t, counter) != 2 {
 		t.Fatalf("%+v", b)
-	}
-	// Budget (2) is now exhausted: the next review parks the branch.
-	commit(t, repo, "a.go", "package a\n\nvar X = 3\n")
-	passCheck(t, repo)
-	r, code = runCLI(t, "review", "--reviewer", "claude")
-	if code != ExitBlocked || !loadBranch(t, repo).Parked || calls(t, counter) != 2 {
-		t.Fatalf("%d %+v", code, r)
-	}
-	r, code = runCLI(t, "review", "--reviewer", "claude")
-	if code != ExitBlocked || r.NextAction != "verify decide accept the open findings, then verify decide approve" {
-		t.Fatalf("%d %+v", code, r)
 	}
 }
 
@@ -259,7 +248,7 @@ func TestConcurrentReviewsDoNotOverspend(t *testing.T) {
 		}
 	}
 	b := loadBranch(t, repo)
-	if b.ReviewCalls != 1 || b.ReviewAttempts != 1 || b.Parked || calls(t, counter) != 1 {
+	if b.ReviewAttempts != 1 || calls(t, counter) != 1 {
 		t.Fatalf("same-SHA concurrent reviews: branch %+v calls %d", b, calls(t, counter))
 	}
 	commit(t, repo, "a.go", "package a\n\nvar X = 2\n")
@@ -268,13 +257,8 @@ func TestConcurrentReviewsDoNotOverspend(t *testing.T) {
 		t.Fatalf("repair delta: %d %+v", code, r)
 	}
 	b = loadBranch(t, repo)
-	if b.ReviewCalls != 2 || b.ReviewAttempts != 2 || b.Parked || calls(t, counter) != 2 {
-		t.Fatalf("repair must consume second review: %+v calls %d", b, calls(t, counter))
-	}
-	commit(t, repo, "a.go", "package a\n\nvar X = 3\n")
-	passCheck(t, repo)
-	if r, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitBlocked || !loadBranch(t, repo).Parked || calls(t, counter) != 2 {
-		t.Fatalf("attempted third review should park: %d %+v", code, r)
+	if b.ReviewAttempts != 2 || calls(t, counter) != 2 {
+		t.Fatalf("repair is a second run: %+v calls %d", b, calls(t, counter))
 	}
 }
 
@@ -285,7 +269,7 @@ func TestFailedReviewSameSHAReusesFailure(t *testing.T) {
 		t.Fatalf("initial: %d %+v", code, r)
 	}
 	r, code := runCLI(t, "review", "--reviewer", "claude")
-	if code != ExitFindings || r.Status != state.StatusFail || len(r.Findings) != 1 || calls(t, counter) != 1 || loadBranch(t, repo).ReviewCalls != 1 {
+	if code != ExitFindings || r.Status != state.StatusFail || len(r.Findings) != 1 || calls(t, counter) != 1 {
 		t.Fatalf("failed record must not silently pass: %d %+v calls %d", code, r, calls(t, counter))
 	}
 	st := state.Open(filepath.Join(repo, ".git"))
@@ -319,7 +303,7 @@ func TestReviewInvalidRetriedOnce(t *testing.T) {
 	counter := fakeReviewer(t, `{"findings":[{"bogus":1}],"resolved":[]}`, cleanOut)
 	_, code := runCLI(t, "review", "--reviewer", "claude")
 	branch := loadBranch(t, repo)
-	if code != 0 || calls(t, counter) != 2 || branch.ReviewCalls != 1 || branch.ReviewAttempts != 2 {
+	if code != 0 || calls(t, counter) != 2 || branch.ReviewAttempts != 2 {
 		t.Fatalf("code %d calls %d branch %+v", code, calls(t, counter), branch)
 	}
 	sha := strings.TrimSpace(gitOut(t, repo, "rev-parse", "HEAD"))
@@ -338,7 +322,7 @@ func TestReviewInvalidTwiceFails(t *testing.T) {
 	counter := fakeReviewer(t, `{"nope":1}`)
 	_, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
-	if code != ExitBlocked || calls(t, counter) != 2 || b.ReviewCalls != 1 || b.ReviewAttempts != 2 {
+	if code != ExitBlocked || calls(t, counter) != 2 || b.ReviewAttempts != 2 {
 		t.Fatalf("code %d calls %d branch %+v", code, calls(t, counter), b)
 	}
 }
@@ -348,7 +332,7 @@ func TestReviewRateLimitConsumesNothing(t *testing.T) {
 	fakeReviewer(t, `!{"is_error":true,"result":"usage limit reached"}`)
 	r, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
-	if code != ExitBlocked || b.ReviewCalls != 0 || b.ReviewAttempts != 1 || !strings.Contains(r.NextAction, "doctor") {
+	if code != ExitBlocked || b.ReviewAttempts != 1 || !strings.Contains(r.NextAction, "doctor") {
 		t.Fatalf("%d %+v branch %+v", code, r, b)
 	}
 }
@@ -357,7 +341,7 @@ func TestReviewMissingCLI(t *testing.T) {
 	repo := checked(t)
 	_, code := runCLI(t, "review", "--reviewer", "claude")
 	b := loadBranch(t, repo)
-	if code != ExitBlocked || b.ReviewCalls != 0 || b.ReviewAttempts != 1 {
+	if code != ExitBlocked || b.ReviewAttempts != 1 {
 		t.Fatalf("code %d branch %+v", code, b)
 	}
 }
@@ -411,7 +395,7 @@ func TestReviewAutoFallsBackOnceWhenUnavailable(t *testing.T) {
 	_, code := runCLI(t, "review", "--reviewer", "auto")
 	b := loadBranch(t, repo)
 	rec, err := state.Open(filepath.Join(repo, ".git")).LoadReview(strings.TrimSpace(gitOut(t, repo, "rev-parse", "HEAD")))
-	if err != nil || code != ExitOK || rec.Reviewer != "codex" || rec.FallbackFrom != "claude" || b.ReviewCalls != 1 ||
+	if err != nil || code != ExitOK || rec.Reviewer != "codex" || rec.FallbackFrom != "claude" ||
 		calls(t, claude) != 1 || calls(t, codex) != 1 {
 		t.Fatalf("code %d rec %+v err %v branch %+v claude %d codex %d", code, rec, err, b, calls(t, claude), calls(t, codex))
 	}
@@ -424,5 +408,48 @@ func TestReviewExplicitChoiceDoesNotFallBack(t *testing.T) {
 	_, code := runCLI(t, "review", "--reviewer", "claude")
 	if code != ExitBlocked || calls(t, codex) != 0 {
 		t.Fatalf("code %d codex calls %d", code, calls(t, codex))
+	}
+}
+
+func TestReviewBudgetIsPerRunNotPerBranch(t *testing.T) {
+	repo := checked(t)
+	counter := fakeReviewer(t, cleanOut)
+	for n := 1; n <= 3; n++ {
+		if n > 1 {
+			commit(t, repo, "a.go", "package a\n\nvar X = "+strconv.Itoa(n)+"\n")
+			passCheck(t, repo)
+		}
+		r, code := runCLI(t, "review", "--reviewer", "claude")
+		if code != ExitOK || r.Status != state.StatusPass || calls(t, counter) != n {
+			t.Fatalf("review %d on a new SHA: code %d calls %d %+v", n, code, calls(t, counter), r)
+		}
+	}
+}
+
+func TestStatusHasNoBranchReviewBudget(t *testing.T) {
+	checked(t)
+	fakeReviewer(t, cleanOut)
+	if _, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitOK {
+		t.Fatalf("review: %d", code)
+	}
+	var out, errb bytes.Buffer
+	Run([]string{"status"}, nil, &out, &errb)
+	for _, gone := range []string{"review budget", "logical reviews", "PARKED"} {
+		if strings.Contains(out.String(), gone) {
+			t.Fatalf("status still prints %q:\n%s", gone, out.String())
+		}
+	}
+	if !strings.Contains(out.String(), "review subprocess attempts: 1 total") {
+		t.Fatalf("status lost the attempts line:\n%s", out.String())
+	}
+}
+
+func TestReviewRunMakesAtMostTwoCallsAcrossFallbackAndRetry(t *testing.T) {
+	checked(t)
+	claude := fakeReviewer(t, `!{"is_error":true,"result":"Not logged in. Please run /login"}`)
+	codex := fakeCodex(t, `{"nope":1}`)
+	_, code := runCLI(t, "review", "--reviewer", "auto")
+	if code != ExitBlocked || calls(t, claude)+calls(t, codex) != 2 {
+		t.Fatalf("code %d claude %d codex %d, want 2 calls in the run", code, calls(t, claude), calls(t, codex))
 	}
 }

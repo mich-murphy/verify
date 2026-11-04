@@ -281,7 +281,7 @@ func TestTextOutputAndNotRepo(t *testing.T) {
 		t.Fatalf("code %d %q", code, out.String())
 	}
 	out.Reset()
-	if Run([]string{"status"}, nil, &out, &errb) != ExitFindings || !strings.Contains(out.String(), "review budget") {
+	if Run([]string{"status"}, nil, &out, &errb) != ExitFindings || !strings.Contains(out.String(), "review subprocess attempts") {
 		t.Fatalf("%q", out.String())
 	}
 	t.Chdir(t.TempDir())

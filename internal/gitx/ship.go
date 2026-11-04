@@ -66,24 +66,6 @@ func (r *Repo) PushLease(ctx context.Context, remote, branch, sha, expected stri
 	return err
 }
 
-// FirstSubject returns the subject of the oldest commit in base..sha, or "".
-func (r *Repo) FirstSubject(ctx context.Context, base, sha string) (string, error) {
-	b, err := r.Resolve(ctx, base)
-	if err != nil {
-		return "", err
-	}
-	s, err := r.Resolve(ctx, sha)
-	if err != nil {
-		return "", err
-	}
-	out, err := r.run(ctx, "log", "--reverse", "--format=%s", b+".."+s)
-	if err != nil {
-		return "", err
-	}
-	first, _, _ := strings.Cut(string(out), "\n")
-	return strings.TrimSpace(first), nil
-}
-
 // RemotePushURL resolves exactly one push destination using normal Git config.
 // Chained rewrites are rejected: passing an already-resolved URL to ls-remote or
 // push must not silently rewrite it to a different repository a second time.

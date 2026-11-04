@@ -17,8 +17,8 @@ review examples live in this repository; development archives are not part of th
 4. Judge and worker are separate. The reviewer is a fresh call with no tools, from a different
    model family by default. It never sees test results or the author's reasoning.
 5. The author fixes; Verify never edits source, commits, rebases or merges.
-6. Every loop has a budget. Requiring another review beyond the budget parks the branch;
-   shipping a parked branch requires explicit human decisions for the current SHA.
+6. Every loop has a budget. A review run makes at most two reviewer calls; a run that cannot
+   get a valid review blocks with exit 3.
 7. Silence by default. Block only on the short list in §8; everything else is a note.
 8. Repository config is code. Changes to quality config raise the lane; they are not silently trusted.
 9. Start with the smallest version and let measurements add the rest.
@@ -41,7 +41,7 @@ CLIs.
 | `verify verify` | Run the configured CLI scenarios when a declared surface changed (§6). |
 | `verify ship [--dry-run] [--remote NAME]` | Push the exact commit (to `origin` by default), open or update the PR, and set the `verify/verified` status (§7). |
 | `verify decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current SHA. |
-| `verify status` | Show the lane, step results, open findings, budgets and the next action for HEAD. |
+| `verify status` | Show the lane, step results, open findings and the next action for HEAD. |
 | `verify setup [--apply]` | Run the static setup audit (§4.3) and print guidance. `--apply` onboards the repository: it writes what is missing and installs the hooks (§4.3.1). |
 | `verify doctor` | Check that git, prek, gh and the reviewer CLIs are available and authenticated, without printing secrets. |
 | `verify agent-hook` | Read an agent tool-call JSON on stdin and exit 2 to block hook bypasses (§9). |
@@ -53,9 +53,9 @@ Every command accepts `--json` and prints one `verify.result/1` object. Exit cod
 | `0` | Passed or OK. |
 | `1` | Blocking findings. |
 | `2` | Usage or configuration error. |
-| `3` | Blocked. Covers a missing prerequisite, a stale SHA, a parked branch, or an unavailable tool or reviewer. |
+| `3` | Blocked. Covers a missing prerequisite, a stale SHA, or an unavailable tool or reviewer. |
 
-`verify status` exits `0` when HEAD is eligible, `1` when its status is `blocked-by-findings`, and `3` for every other not-eligible state (missing check or review, parked without a decision, stale evidence).
+`verify status` exits `0` when HEAD is eligible, `1` when its status is `blocked-by-findings`, and `3` for every other not-eligible state (missing check or review, stale evidence).
 
 Every non-zero result carries `next_action`.
 
@@ -72,7 +72,7 @@ Verify needs no configuration file. Everything that can be derived is derived:
 | Stages | Fixed: `pre-commit`, then `pre-push` (§4.5) |
 | Prepare | The root lockfile, else the single immediate subdirectory holding one (run there with the manager's directory flag): `npm ci`, `pnpm install --frozen-lockfile`, `bun install --frozen-lockfile` or `yarn install --immutable`; none for Go |
 | Reviewer | The person running Verify, through the environment: `VERIFY_REVIEWER` (`auto`, `claude` or `codex`; default `auto`), `VERIFY_CLAUDE_MODEL` (default `opus`), `VERIFY_CODEX_MODEL` (default: the CLI's own) |
-| Limits | Fixed: 2 logical reviews per branch, each with at most one invalid-output retry (§5); Sign-off above 400 changed lines |
+| Limits | Fixed: 2 reviewer calls per review run (§5); Sign-off above 400 changed lines |
 
 An optional `verify.yaml` in the repository root holds only facts about the repository that cannot
 be derived. Every key is optional, and an unknown key is an error:
@@ -117,7 +117,7 @@ State lives under `<git-common-dir>/verify/`. Linked worktrees share it, and it 
 
 | Path | Holds |
 |---|---|
-| `branches/<branch>.json` | `verify.branch/1`: logical reviews used, subprocess attempts, persistent review findings (Verify-assigned IDs `F1`, `F2`, …, with state `open`, `resolved` or `accepted`), the last reviewed SHA, the parked flag, and decisions. |
+| `branches/<branch>.json` | `verify.branch/1`: subprocess attempts, persistent review findings (Verify-assigned IDs `F1`, `F2`, …, with state `open`, `resolved` or `accepted`), the last reviewed SHA, and decisions. |
 | `runs/<sha>/check.json` | `verify.check/1` record. |
 | `runs/<sha>/review.json` | `verify.review/1` record. |
 | `runs/<sha>/verify.json` | `verify.verify/1` record. |
@@ -488,23 +488,22 @@ invalid output.
 
 ### Budget
 
-Each branch gets 2 logical reviews: the initial review and one changed-commit review, using a
-delta when ancestry permits. Each logical review may retry invalid output once; both subprocess
-attempts share that logical slot. Attempts are persisted before invocation and counted separately.
-Admission, invocation and publication are serialized per branch to prevent budget oversubscription.
+One `verify review` run makes at most two reviewer calls: the primary reviewer, then either one
+fallback to the other family when the primary is unavailable, or one retry when its output is
+invalid. The run is the whole budget. Nothing is carried between runs, so a new SHA, or a rerun
+that finds no recorded review, starts fresh. A run that cannot get a valid review blocks with
+exit 3. Attempts are persisted before invocation and counted separately. Admission, invocation
+and publication are serialized per branch.
 
 A valid recorded review for the exact SHA, merge-base and branch is reused without invoking a
-reviewer, spending budget or rewriting its raw result. Current decisions determine its effective
-findings. The final permitted clean review can pass. A further required review parks the branch;
-its open blocking findings then require `verify decide accept`, and `verify decide approve` is required
-for the current SHA before shipping.
+reviewer or rewriting its raw result. Current decisions determine its effective findings.
 
 A rate-limit or auth failure on the reviewer CLI is a blocked result (exit 3). A no-output
-unavailable call spends no logical slot, but its invocation still counts as an attempt. Invalid
-output spends a logical slot, whether or not its allowed retry succeeds.
+unavailable call counts as an attempt but not as a used call. Invalid output counts as a used
+call, whether or not its allowed retry succeeds.
 
 The effective review result for a SHA is `pass` when no blocking finding remains open. This alone
-is not shipping eligibility: all other requirements, including a parked-branch decision, still apply.
+is not shipping eligibility: all other requirements still apply.
 
 ## 6. Verify
 
@@ -536,7 +535,6 @@ mutation. Decisions never rewrite the recorded verdict.
 - The lane's required steps have fresh, coherent evidence for the SHA and current merge-base,
   passing under the same decision-aware assessment used by `status`.
 - No blocking finding is open.
-- The branch is not parked, or a decision covers it.
 - A Sign-off lane has an `approve` decision for that SHA.
 
 Verify then:
@@ -545,7 +543,10 @@ Verify then:
    branch tip, and pushes the exact SHA to that same destination with an explicit force-with-lease.
    Multiple push destinations or chained URL rewrites that could change the target fail closed.
 2. Opens or updates the PR with `gh` targeting that GitHub repository and host, with a body that
-   summarises executed steps, effective findings and notes.
+   summarises executed steps, effective findings and notes. The PR is opened ready for review with
+   a title and description composed from the commits and diff by the reviewer CLI (no review
+   budget), falling back to the commit messages. The description comes first in the body, then the
+   evidence.
 3. Sets `verify/verified=success` on that SHA in the same repository through `gh api`.
 
 Local evidence and reviewer claims are distinguished in the PR body. Verify does not claim remote
@@ -565,7 +566,6 @@ Only these block a commit. Everything else is a note in `status` and the PR body
 - An open blocking review finding.
 - A verify `no-go` or `inconclusive` verdict.
 - A missing Sign-off approval.
-- A further required review beyond the logical review budget, without the required human decisions.
 
 ## 9. Agent integration
 

@@ -68,7 +68,7 @@ func actions(o Options) []action {
 	ref := "refs/heads/" + o.Branch
 	return []action{
 		{"push", fmt.Sprintf("git push --force-with-lease=%s:<remote value> %s %s:%s", ref, o.Remote, o.SHA, ref), pushStep},
-		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create (title %q, base %s) or gh pr edit", o.Branch, o.Target, o.Title, o.Base), prStep},
+		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create (title %q, base %s, description %q) or gh pr edit", o.Branch, o.Target, o.Title, o.Base, firstLine(o.Body)), prStep},
 		{"status", fmt.Sprintf("gh api --hostname github.com -X POST repos/%s/statuses/%s -f state=success -f context=verify/verified", o.Target, o.SHA), statusStep},
 	}
 }
@@ -118,7 +118,7 @@ func pushStep(ctx context.Context, o Options, _ *Report) (string, error) {
 		return "", fmt.Errorf("cannot read selected push target branch for lease")
 	}
 	if err := o.Repo.PushLeaseToURL(ctx, o.pushURL, o.Branch, o.SHA, expected); err != nil {
-		return "", fmt.Errorf("selected push target rejected lease push")
+		return "", fmt.Errorf("selected push target rejected lease push\n%s", lastLines(strings.ReplaceAll(err.Error(), o.pushURL, "<push url>"), 10))
 	}
 	if expected == "" {
 		expected = "absent"
@@ -153,7 +153,7 @@ func prStep(ctx context.Context, o Options, rep *Report) (string, error) {
 	}
 
 	if pr.State == "OPEN" && pr.Number > 0 {
-		if _, err := gh(ctx, o, "pr", "edit", fmt.Sprint(pr.Number), "--repo", "github.com/"+o.Target, "--body-file", bodyFile); err != nil {
+		if _, err := gh(ctx, o, "pr", "edit", fmt.Sprint(pr.Number), "--repo", "github.com/"+o.Target, "--title", o.Title, "--body-file", bodyFile); err != nil {
 			return "", err
 		}
 		rep.PRURL = pr.URL
@@ -255,3 +255,14 @@ func githubPath(raw string) (string, error) {
 	return strings.TrimPrefix(u.Path, "/"), nil
 }
 func short(s string) string { return s[:min(12, len(s))] }
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
+}
+
+// lastLines keeps the tail of git's stderr, where a pre-push hook prints its own failure.
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.Join(lines[max(0, len(lines)-n):], "\n")
+}

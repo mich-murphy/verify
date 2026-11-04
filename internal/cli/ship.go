@@ -26,14 +26,14 @@ func runShip(env *Env) int {
 			Message: refusal.msg, NextAction: refusal.next, Findings: v.elig.Blocking,
 		}, ExitBlocked)
 	}
-	title, err := v.repo.FirstSubject(env.Ctx, v.loaded.MergeBase, v.sha)
-	if err != nil || title == "" {
-		title = v.branch
+	desc, derr := v.describe(env, *dry)
+	if derr != nil {
+		return env.Fail("ship", derr.code, derr.msg, derr.next)
 	}
 	rep, err := ship.Run(env.Ctx, ship.Options{
 		Repo: v.repo, Remote: *remote, Branch: v.branch, SHA: v.sha, Base: v.loaded.Config.Base,
-		Title: title, Lane: v.elig.Lane, DryRun: *dry,
-		Body: ship.Body(ship.BodyInput{SHA: v.sha, Lane: v.elig.Lane, LaneReasons: v.lane.Reasons, Check: v.recs.chk, Review: v.recs.rev, Verify: v.recs.ver, Branch: v.recs.br}),
+		Title: desc.Title, Lane: v.elig.Lane, DryRun: *dry,
+		Body: ship.Body(ship.BodyInput{Description: desc.Body, SHA: v.sha, Lane: v.elig.Lane, LaneReasons: v.lane.Reasons, Check: v.recs.chk, Review: v.recs.rev, Verify: v.recs.ver, Branch: v.recs.br}),
 	})
 	res := Result{Command: "ship", SHA: v.sha, Lane: v.lane.Lane, Status: "shipped", Steps: shipSteps(rep), Message: shipMessage(rep)}
 	switch {

@@ -215,19 +215,12 @@ func (e *evaluator) reviewBlocking() []state.Finding {
 
 func (e *evaluator) reviewGaps() []gap {
 	var gaps []gap
-	// A parked branch with an approval may skip the review record once every
-	// blocking review finding has been accepted.
-	parkedOK := e.in.Branch.Parked && e.approveAny()
-	if (e.in.Review == nil || e.in.Review.SHA != e.in.SHA || e.in.Review.MergeBase != e.in.MergeBase || e.in.Review.Branch != e.in.Branch.Name) && !parkedOK {
+	if e.in.Review == nil || e.in.Review.SHA != e.in.SHA || e.in.Review.MergeBase != e.in.MergeBase || e.in.Review.Branch != e.in.Branch.Name {
 		gaps = append(gaps, gap{"review: no review record for this commit", "run verify review"})
 	}
 	for _, f := range e.reviewBlocking() {
 		e.res.Blocking = append(e.res.Blocking, f)
-		action := fmt.Sprintf("fix %s, commit and run verify check", f.ID)
-		if e.in.Branch.Parked {
-			action = fmt.Sprintf("run verify decide accept %s --reason TEXT", f.ID)
-		}
-		gaps = append(gaps, gap{fmt.Sprintf("review: blocking finding %s: %s", f.ID, f.Message), action})
+		gaps = append(gaps, gap{fmt.Sprintf("review: blocking finding %s: %s", f.ID, f.Message), fmt.Sprintf("fix %s, commit and run verify check", f.ID)})
 	}
 	return gaps
 }
@@ -269,12 +262,8 @@ func (e *evaluator) approvalGaps() []gap {
 	if e.approveAny() {
 		return nil
 	}
-	const act = "run verify decide approve --reason TEXT"
-	switch {
-	case e.in.Branch.Parked:
-		return []gap{{"branch is parked: approve is required", act}}
-	case e.in.Check.Lane == laneSignoff:
-		return []gap{{"signoff: no approve decision for this commit", act}}
+	if e.in.Check.Lane == laneSignoff {
+		return []gap{{"signoff: no approve decision for this commit", "run verify decide approve --reason TEXT"}}
 	}
 	return nil
 }

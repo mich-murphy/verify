@@ -53,7 +53,7 @@ the `gh` CLI. Reviews use the `claude` or `codex` subscription CLIs, chosen by `
 
 Every command accepts `--json`. Non-zero results include a `next_action`.
 Exit codes: `0` passed, `1` blocking findings, `2` usage or config error,
-`3` blocked (missing prerequisite, stale SHA, parked branch, unavailable tool).
+`3` blocked (missing prerequisite, stale SHA, unavailable tool).
 
 ## Commands
 
@@ -62,7 +62,7 @@ Exit codes: `0` passed, `1` blocking findings, `2` usage or config error,
 | `verify check [--sha REF] [--fast]` | Run guards, the setup audit and repository hooks. Reuses a passing check for an identical tree. |
 | `verify review [--intent FILE] [--reviewer auto\|claude\|codex]` | One fresh review, or a delta review after a repair. |
 | `verify verify` | Run configured CLI scenarios when a declared surface changed. |
-| `verify ship [--dry-run] [--remote NAME]` | Push the checked commit, open or update the PR, set `verify/verified`. |
+| `verify ship [--dry-run] [--remote NAME]` | Push the checked commit, open or update the PR (opened ready, with a title and description composed from the commits and diff by the reviewer CLI, or from the commit messages when it is unavailable), set `verify/verified`. |
 | `verify decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current commit. |
 | `verify status` | Show the lane, results, open findings and the next action. Exits 1 when findings block and 3 when blocked. |
 | `verify setup [--apply]` | Audit the quality setup with notes on hook scope, always-run and uncacheable hooks. Without prek config it prints the YAML that `--apply` would write. |
@@ -85,8 +85,8 @@ both extensions. Update Claude Code hook commands too.
 State now lives under `<git-common-dir>/verify/`, and JSON schemas use the `verify.`
 prefix (for example `verify.result/1`). Existing `<git-common-dir>/gate/`
 state is left untouched and is not migrated or reused. Keep it for historical review
-budgets, decisions and quarantine markers; do not switch names to evade a parked branch
-or unresolved finding. Settle any interrupted Gate processes before running Verify,
+budgets, decisions and quarantine markers; do not switch names to evade an
+unresolved finding. Settle any interrupted Gate processes before running Verify,
 and regenerate check, review and scenario evidence with Verify rather than copying records.
 
 Update GitHub branch protection from `gate/verified` to `verify/verified` when adopting
@@ -107,10 +107,9 @@ existing `verify` subcommand for CLI scenarios.
 - One fresh reviewer covers correctness, security and simplicity. Concrete security
   violations use the existing correctness-plus-repro contract; simplicity is advisory.
   A reviewer-written repro is a claim, not a test that Verify has executed.
-- Each branch has an initial review and one changed-commit delta review. Each logical
-  review may retry invalid output once; subprocess attempts are counted separately.
-  Repeating a valid exact-commit review reuses it. The final permitted clean review
-  can pass; a further required review parks the branch for explicit human decisions.
+- A review run makes at most two reviewer calls: the primary, then one fallback to the
+  other family or one retry of invalid output. Nothing carries between runs, so a new
+  commit starts fresh. Repeating a valid exact-commit review reuses it.
 - Interrupted execution leaves a worktree ownership marker. Inspect/stop surviving
   processes before explicitly removing the marker named in the error; do not bypass
   it just to rerun checks. Older records missing required provenance must be removed

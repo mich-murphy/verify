@@ -89,9 +89,6 @@ func runReview(env *Env) int {
 	if err == nil && previous.MergeBase == loaded.MergeBase && previous.Branch == name {
 		return reuseReview(env, previous, br, l.Lane)
 	}
-	if msg, next = reviewBudget(env.Ctx, st, name, br); msg != "" {
-		return blocked(msg, next)
-	}
 	return runPlannedReview(env, repo, st, rv, fallback, br, *intentFile, name, sha, loaded.MergeBase, l.Lane)
 }
 
@@ -131,32 +128,30 @@ func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv, fallback r
 	return finishReview(env, st, rv, fallback, plan, name, sha, mergeBase, laneName)
 }
 
+// maxCallsPerRun bounds the reviewer subprocess calls of one verify review run, fallback included.
+const maxCallsPerRun = 2
+
 func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan reviewPlan, name, sha, mergeBase, laneName string) int {
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
 	countAttempt := func() error {
 		return st.UpdateBranch(env.Ctx, name, func(b *state.Branch) error { b.ReviewAttempts++; return nil })
 	}
-	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt)
+	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt, maxCallsPerRun)
 	fallbackFrom := ""
 	if errors.Is(err, review.ErrUnavailable) && used == 0 && fallback != nil {
 		fallbackFrom, rv = rv.Name(), fallback
 		var more int
-		resp, used, more, err = callReviewer(env, rv, plan, countAttempt)
+		resp, used, more, err = callReviewer(env, rv, plan, countAttempt, maxCallsPerRun-attempts)
 		attempts += more
 	}
 	if err != nil {
-		if used > 0 {
-			if uerr := st.UpdateBranch(env.Ctx, name, func(b *state.Branch) error { b.ReviewCalls += used; return nil }); uerr != nil {
-				err = errors.Join(err, uerr)
-			}
-		}
 		next := "retry verify review"
 		if errors.Is(err, review.ErrUnavailable) {
 			next = "fix reviewer CLI access (verify doctor), or use --reviewer"
 		}
 		return blocked(err.Error(), next)
 	}
-	open, err := applyReview(env.Ctx, st, name, sha, resp, used)
+	open, err := applyReview(env.Ctx, st, name, sha, resp)
 	if err != nil {
 		return blocked(err.Error(), "resolve the state error")
 	}
@@ -204,22 +199,8 @@ func reviewAdmission(st *state.Store, name, sha, mergeBase, laneName string) (br
 	return br, "", ""
 }
 
-// reviewBudget is checked only after an exact-SHA/base/branch review is ruled out.
-func reviewBudget(ctx context.Context, st *state.Store, name string, br *state.Branch) (msg, next string) {
-	if br.Parked {
-		return "branch is parked", "verify decide accept the open findings, then verify decide approve"
-	}
-	if br.ReviewCalls >= config.ReviewCalls {
-		if err := st.UpdateBranch(ctx, name, func(b *state.Branch) error { b.Parked = true; return nil }); err != nil {
-			return err.Error(), "resolve the state error"
-		}
-		return fmt.Sprintf("review budget exhausted (%d/%d calls); branch parked", br.ReviewCalls, config.ReviewCalls), "verify decide"
-	}
-	return "", ""
-}
-
 // reuseReview emits immutable recorded outcome with current branch dispositions;
-// it never runs the reviewer, consumes budget or rewrites a failed record to pass.
+// it never runs the reviewer or rewrites a failed record to pass.
 func reuseReview(env *Env, rec *state.ReviewRecord, br *state.Branch, laneName string) int {
 	var findings []state.Finding
 	blocking := false
@@ -251,9 +232,8 @@ func reuseReview(env *Env, rec *state.ReviewRecord, br *state.Branch, laneName s
 
 // applyReview records a validated response on the branch under the lock and
 // returns the review findings that remain open.
-func applyReview(ctx context.Context, st *state.Store, name, sha string, resp *review.Response, used int) (open []state.Finding, err error) {
+func applyReview(ctx context.Context, st *state.Store, name, sha string, resp *review.Response) (open []state.Finding, err error) {
 	err = st.UpdateBranch(ctx, name, func(b *state.Branch) error {
-		b.ReviewCalls += used
 		for _, f := range resp.Findings {
 			f.ID = b.NextFindingID()
 			b.Findings = append(b.Findings, f)
@@ -329,10 +309,10 @@ func reviewReason(b *state.Branch, id string) string {
 	return "resolved by subsequent review"
 }
 
-// callReviewer counts subprocess attempts separately from the one logical review.
+// callReviewer counts subprocess attempts separately from the one review.
 // Persist each attempt before execution; a crash cannot erase invocation history.
-func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func() error) (resp *review.Response, used, attempts int, err error) {
-	for range 2 {
+func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func() error, limit int) (resp *review.Response, used, attempts int, err error) {
+	for range limit {
 		if err := beforeAttempt(); err != nil {
 			return nil, used, attempts, err
 		}
@@ -355,5 +335,5 @@ func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func
 		}
 		err = rerr
 	}
-	return nil, used, attempts, fmt.Errorf("reviewer output invalid after retry: %w", err)
+	return nil, used, attempts, fmt.Errorf("reviewer output invalid after %d call(s): %w", attempts, err)
 }

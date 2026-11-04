@@ -52,7 +52,6 @@ func decisionsGen(ids []string, shas []string, kinds []string) *rapid.Generator[
 
 type inputOpts struct {
 	allAccepted bool
-	parked      *bool
 	kinds       []string
 	shas        []string
 }
@@ -88,11 +87,6 @@ func inputGen(o inputOpts) *rapid.Generator[Input] {
 		br := &state.Branch{
 			Name:      "feature",
 			Decisions: decisionsGen(ids, o.shas, o.kinds).Draw(t, "decisions"),
-		}
-		if o.parked != nil {
-			br.Parked = *o.parked
-		} else {
-			br.Parked = rapid.Bool().Draw(t, "parked")
 		}
 		var rev *state.ReviewRecord
 		if rapid.Bool().Draw(t, "hasReview") {
@@ -141,17 +135,19 @@ func TestProp_AcceptedFindingsNeverBlock(t *testing.T) {
 	})
 }
 
-func TestProp_ParkedBranchIsNotEligibleWithoutApproveOnTheSHA(t *testing.T) {
-	parked := true
+func TestProp_SignoffLaneIsNotEligibleWithoutApproveOnTheSHA(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		in := inputGen(inputOpts{parked: &parked}).Draw(t, "input")
+		in := inputGen(inputOpts{}).Draw(t, "input")
+		if in.Check.Lane != "signoff" {
+			return
+		}
 		for _, d := range in.Branch.Decisions {
 			if d.Kind == state.DecideApprove && d.SHA == sha {
 				return
 			}
 		}
 		if got := Evaluate(in); got.Eligible {
-			t.Fatalf("parked branch eligible with decisions %+v", in.Branch.Decisions)
+			t.Fatalf("signoff eligible with decisions %+v", in.Branch.Decisions)
 		}
 	})
 }

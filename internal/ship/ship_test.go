@@ -162,7 +162,7 @@ func TestShipEditsExistingPRAndUsesLease(t *testing.T) {
 	if got := git(t, e.origin, "rev-parse", "refs/heads/feature"); got != e.sha {
 		t.Fatalf("remote at %s", got)
 	}
-	if log := e.log(t); !strings.Contains(log, "pr edit 7 --repo github.com/example/project --body-file") || strings.Contains(log, "pr create") {
+	if log := e.log(t); !strings.Contains(log, "pr edit 7 --repo github.com/example/project --title first --body-file") || strings.Contains(log, "pr create") {
 		t.Fatalf("log:\n%s", log)
 	}
 	if rep.PRURL != "https://example.test/pr/7" {
@@ -247,9 +247,6 @@ func TestInvalidArgs(t *testing.T) {
 	if err := e.repo.PushLease(t.Context(), "origin", "feature", "HEAD", ""); err == nil {
 		t.Fatal("sha")
 	}
-	if s, err := e.repo.FirstSubject(t.Context(), e.sha, e.sha); err != nil || s != "" {
-		t.Fatalf("%q %v", s, err)
-	}
 }
 
 func TestBody(t *testing.T) {
@@ -277,5 +274,21 @@ func TestBody(t *testing.T) {
 	}
 	if !strings.Contains(Body(BodyInput{SHA: sha, Lane: "docs"}), "docs") {
 		t.Error("minimal body")
+	}
+}
+
+func TestRejectedPushShowsTheHooksOwnFailureLine(t *testing.T) {
+	e := newEnv(t)
+	hook := filepath.Join(e.dir, ".git", "hooks", "pre-push")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nfor i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo \"noise $i\" >&2; done\necho 'pre-push: lint failed in a.go' >&2\nexit 1\n"), 0o700); err != nil { // #nosec G306 -- fake hook in test temp directory
+		t.Fatal(err)
+	}
+	rep, err := Run(t.Context(), e.opts(false))
+	if err == nil {
+		t.Fatal("push should have been rejected")
+	}
+	detail := rep.Steps[0].Detail
+	if !strings.Contains(detail, "pre-push: lint failed in a.go") || strings.Contains(detail, "noise 1\n") || strings.Contains(detail, "noise 2\n") {
+		t.Fatalf("want the last ten stderr lines, got:\n%s", detail)
 	}
 }

@@ -34,13 +34,13 @@ func TestProductNamespace(t *testing.T) {
 	}
 	legacy := &Store{Dir: filepath.Join(commonDir, "gate")}
 	if err := legacy.UpdateBranch(t.Context(), "feature", func(b *Branch) error {
-		b.Parked = true
+		b.ReviewAttempts = 1
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	current, err := Open(commonDir).LoadBranch("feature")
-	if err != nil || current.Parked {
+	if err != nil || current.ReviewAttempts != 0 {
 		t.Fatalf("legacy state must not be imported: %+v %v", current, err)
 	}
 	if _, err := os.Stat(legacy.BranchPath("feature")); err != nil {
@@ -112,8 +112,8 @@ func TestReviewAttemptValidation(t *testing.T) {
 			t.Fatalf("invalid attempt count %d: %v", n, err)
 		}
 	}
-	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.ReviewCalls = 1; return nil }); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("branch with fewer attempts than reviews: %v", err)
+	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.ReviewAttempts = -1; return nil }); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("branch with negative attempts: %v", err)
 	}
 }
 
@@ -127,7 +127,6 @@ func TestBranch(t *testing.T) {
 		t.Fatal(b.NextFindingID())
 	}
 	err = s.UpdateBranch(t.Context(), "feat/x", func(b *Branch) error {
-		b.ReviewCalls++
 		b.ReviewAttempts++
 		b.Findings = append(b.Findings, Finding{ID: "F1", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "one"}, Finding{ID: "F7", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "seven"})
 		return nil
@@ -136,7 +135,7 @@ func TestBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err = s.LoadBranch("feat/x")
-	if err != nil || b.ReviewCalls != 1 || b.NextFindingID() != "F8" || b.Schema != SchemaBranch {
+	if err != nil || b.ReviewAttempts != 1 || b.NextFindingID() != "F8" || b.Schema != SchemaBranch {
 		t.Fatalf("%+v %v", b, err)
 	}
 	if strings.Contains(filepath.Base(s.BranchPath("a/b")), "/") {
@@ -408,5 +407,45 @@ func TestUncontendedLockIsSilentAndRecordsPid(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(path); string(b) != strconv.Itoa(os.Getpid()) { // #nosec G304 -- test-owned temp path
 		t.Fatalf("lock file holds %q", b)
+	}
+}
+
+func TestLoadBranchAcceptsRecordsWrittenBeforeThePerRunBudget(t *testing.T) {
+	s := Open(t.TempDir())
+	legacy := `{"schema":"verify.branch/1","name":"feature","review_calls":2,"review_attempts":3,"findings":[],"parked":true,"decisions":[]}`
+	if err := WriteAtomic(s.BranchPath("feature"), []byte(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.LoadBranch("feature")
+	if err != nil || b.ReviewAttempts != 3 {
+		t.Fatalf("legacy record: %+v %v", b, err)
+	}
+	if err := s.UpdateBranch(t.Context(), "feature", func(*Branch) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(s.BranchPath("feature"))
+	if err != nil || strings.Contains(string(data), "parked") || strings.Contains(string(data), "review_calls") {
+		t.Fatalf("legacy fields survive a save: %s %v", data, err)
+	}
+}
+
+func TestBranchDescriptionRoundTripsAndIsValidated(t *testing.T) {
+	s := Open(t.TempDir())
+	want := Description{SHA: sha, Title: "Add the thing", Body: "It adds the thing.", Source: DescribedByCodex}
+	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.Description = &want; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.LoadBranch("feature")
+	if err != nil || b.Description == nil || *b.Description != want {
+		t.Fatalf("%+v %v", b, err)
+	}
+	for _, bad := range []Description{
+		{SHA: "xyz", Title: "t", Body: "b", Source: DescribedByCodex},
+		{SHA: sha, Title: " ", Body: "b", Source: DescribedByCodex},
+		{SHA: sha, Title: "t", Body: "b", Source: "human"},
+	} {
+		if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.Description = &bad; return nil }); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%+v accepted: %v", bad, err)
+		}
 	}
 }

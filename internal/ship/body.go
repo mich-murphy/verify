@@ -10,6 +10,7 @@ import (
 
 // BodyInput is the evidence summarised in the PR body.
 type BodyInput struct {
+	Description string // what the work does, composed before the evidence
 	SHA         string
 	Lane        string
 	LaneReasons []string
@@ -19,9 +20,12 @@ type BodyInput struct {
 	Branch      *state.Branch
 }
 
-// Body renders the PR description.
+// Body renders the PR description: the work first, then the Verify evidence.
 func Body(in BodyInput) string {
 	var b strings.Builder
+	if in.Description != "" {
+		b.WriteString(in.Description + "\n\n")
+	}
 	fmt.Fprintf(&b, "## Verify\n\nCommit `%s`, **%s** lane.\n", in.SHA, in.Lane)
 	if len(in.LaneReasons) > 0 {
 		fmt.Fprintf(&b, "Lane reasons: %s.\n", strings.Join(in.LaneReasons, "; "))
@@ -93,3 +97,24 @@ func writeDecisions(b *strings.Builder, in BodyInput) {
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// FallbackNote closes a description built from commit messages alone; reason says why.
+func FallbackNote(reason string) string {
+	return "Description generated from commit messages (" + reason + ")"
+}
+
+// FallbackDescription composes a title and description from commit subjects,
+// oldest first, when no reviewer CLI could.
+func FallbackDescription(branch string, subjects []string, reason string) (title, description string) {
+	note := FallbackNote(reason)
+	human := strings.ReplaceAll(branch, "-", " ")
+	switch len(subjects) {
+	case 0:
+		return human, note
+	case 1:
+		title = subjects[0]
+	default:
+		title = human + ": " + subjects[len(subjects)-1]
+	}
+	return title, strings.Join(subjects, "\n") + "\n\n" + note
+}
