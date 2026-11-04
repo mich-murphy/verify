@@ -388,10 +388,13 @@ Rules for the full tier:
    `-shuffle`); CI keeps them. Unchanged packages then cost almost nothing.
 3. **Run in parallel.** Independent full-tier hooks share one prek `priority`.
 4. **Scope to the blast radius.** Every hook declares `files` or `types` so that it runs only when
-   a relevant file changed: Go tests, coverage, vet, deadcode and govulncheck on `types: [go]`
-   (govulncheck's verdict depends on which functions the code calls, so a code change can expose
-   an old advisory; a manifest change makes the run `full` anyway); type checks and tests on the
-   language's types. `always_run` is for cheap
+   a relevant file changed: Go tests, coverage, vet, deadcode, govulncheck and `go mod tidy` on
+   `files: '\.go$|(^|/)go\.(mod|sum)$'` (prek ANDs `files` with `types`, so the regex replaces
+   `types: [go]`; govulncheck's verdict depends on which functions the code calls, so a code
+   change can expose an old advisory, and a dependency bump in `go.mod` or `go.sum` is the change
+   most likely to bring one in); Go format and lint also on `.golangci.*` and
+   `.golangci-lint-version`; type checks and tests on the language's types, tests also on
+   lockfiles. `always_run` is for cheap
    hooks only. A tool that can scope itself reads `PRE_COMMIT_FROM_REF` and runs complete when it
    is unset: `vitest run ${PRE_COMMIT_FROM_REF:+--changed "$PRE_COMMIT_FROM_REF"}`, or
    `TURBO_SCM_BASE=$PRE_COMMIT_FROM_REF turbo run test --affected`. Go needs nothing extra: its

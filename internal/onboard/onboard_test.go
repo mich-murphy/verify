@@ -56,7 +56,7 @@ func TestApplyGoMakeTargets(t *testing.T) {
 		"Makefile": "fmt-check:\n\ttrue\ncover:\n\ttrue\nvuln:\n\ttrue\n",
 	})
 	_, p := apply(t, d)
-	for _, want := range []string{`"make fmt-check"`, `"make cover"`, `"make vuln"`, "id: coverage", "types: [go]", "repo: builtin", "exclude: (^|/)testdata/", "priority: 10"} {
+	for _, want := range []string{`"make fmt-check"`, `"make cover"`, `"make vuln"`, "id: coverage", `files: '\.go$|(^|/)go\.(mod|sum)$'`, "repo: builtin", "exclude: (^|/)testdata/", "priority: 10"} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("missing %q in\n%s", want, p)
 		}
