@@ -985,3 +985,47 @@ func TestReuseStillRunsGuardsOnTheNewHistory(t *testing.T) {
 		t.Fatalf("prek ran %d stages, want only the first branch's 2", n)
 	}
 }
+
+func TestQueuedCheckOnSameShaReusesThePassTheLockHolderRecorded(t *testing.T) {
+	calls, _ := slowPrek(t)
+	script := "#!/bin/sh\nif [ \"$1\" = list ]; then echo '[]'; exit 0; fi\nif [ \"$1\" = --version ]; then echo 'prek 0.5.5'; exit 0; fi\necho \"$*\" >> \"$PREK_CALLS_LOG\"\nsleep 1\nexit 0\n"
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "prek"), []byte(script), 0o700); err != nil { // #nosec G306 -- fake executable
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	repo := newRepo(t, head, true)
+	type result struct {
+		out *Outcome
+		err error
+	}
+	holder := make(chan result, 1)
+	go func() {
+		out, err := Run(t.Context(), repo, Options{})
+		holder <- result{out, err}
+	}()
+	deadline := time.Now().Add(20 * time.Second)
+	for stageRuns(t, calls) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("first check never reached its hooks")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	queued, err := Run(t.Context(), repo, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := <-holder
+	if first.err != nil || first.out.Record.Status != "pass" {
+		t.Fatalf("%+v %v", first.out, first.err)
+	}
+	if queued.Record.Status != "pass" || queued.Record.SHA != first.out.Record.SHA {
+		t.Fatalf("%+v", queued.Record)
+	}
+	if !slices.Contains(queued.Notes, "check already passed for this commit") {
+		t.Fatalf("notes %q", queued.Notes)
+	}
+	if n := stageRuns(t, calls); n != 2 {
+		t.Fatalf("prek ran %d stages, want 2 (the lock holder's only)", n)
+	}
+}

@@ -147,12 +147,27 @@ func Run(ctx context.Context, repo *gitx.Repo, opt Options) (*Outcome, error) {
 	if blocked {
 		return rc.shortCircuit(ctx, cfg, out)
 	}
+	return rc.lockedCheck(ctx, sha, cfg, out)
+}
+
+// lockedCheck runs the hooks under the worktree lock. A check that queued behind
+// another re-reads the records once it holds the lock, since the holder may have
+// just passed this commit or its tree.
+func (rc *runCtx) lockedCheck(ctx context.Context, sha string, cfg config.Config, out *Outcome) (*Outcome, error) {
+	unlock, err := state.LockFile(ctx, filepath.Join(rc.store.WorktreesDir(), "check.lock"))
+	if err != nil {
+		return nil, fmt.Errorf("lock worktree: %w", err)
+	}
+	defer unlock()
+	if reused, err := rc.reuse(ctx, out); err != nil || reused {
+		return out, err
+	}
 	if err := rc.inWorktree(ctx, sha, cfg); err != nil {
 		return nil, err
 	}
-	rec.Finished = time.Now().UTC()
-	rec.Status = status(rec)
-	if err := rc.store.SaveCheck(ctx, rec); err != nil {
+	rc.rec.Finished = time.Now().UTC()
+	rc.rec.Status = status(rc.rec)
+	if err := rc.store.SaveCheck(ctx, rc.rec); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -293,13 +308,8 @@ func (rc *runCtx) runFast(ctx context.Context, out *Outcome) error {
 
 func (rc *runCtx) inWorktree(ctx context.Context, sha string, cfg config.Config) (runErr error) {
 	dir := rc.store.WorktreesDir()
-	unlock, err := state.LockFile(ctx, filepath.Join(dir, "check.lock"))
-	if err != nil {
-		return fmt.Errorf("lock worktree: %w", err)
-	}
-	defer unlock()
 	wt := filepath.Join(dir, "check")
-	if err = gitx.CheckWorktreeQuarantine(wt); err != nil {
+	if err := gitx.CheckWorktreeQuarantine(wt); err != nil {
 		return err
 	}
 	// Claim ownership before reset, audit or repository-configured commands.

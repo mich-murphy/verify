@@ -298,9 +298,9 @@ func makeTarget(dir string, cands []string, skipUncached bool) (entry, refused s
 // wanted lists the unmet, unwaived REQUIRED hook obligations. A coverage hook
 // meets the test obligation too, so no separate test hook is written, unless
 // the coverage entry point was refused as uncached and the repository has a
-// cacheable test entry point of its own.
-func wanted(dir string, rep audit.Report) ([]string, error) {
-	var ids []string
+// cacheable test entry point of its own. In that case the test obligation is
+// dropped too, and refusedTest names the refused target that would have met it.
+func wanted(dir string, rep audit.Report) (ids []string, refusedTest string, err error) {
 	for _, o := range rep.Obligations {
 		if _, _, ok := audit.HookRule(o.ID); ok && o.Level == audit.Required && !o.Satisfied && !o.Waived {
 			ids = append(ids, o.ID)
@@ -308,12 +308,12 @@ func wanted(dir string, rep audit.Report) ([]string, error) {
 	}
 	i := slices.Index(ids, "test")
 	if i < 0 {
-		return ids, nil
+		return ids, "", nil
 	}
 	_, names, _ := audit.HookRule("coverage")
 	e, refused, err := entryPoint(dir, "coverage", rep.Profile, names)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	switch {
 	case !slices.Contains(ids, "coverage"):
@@ -323,14 +323,15 @@ func wanted(dir string, rep audit.Report) ([]string, error) {
 	case e == "" && refused != "":
 		_, testNames, _ := audit.HookRule("test")
 		if own, _, err := entryPoint(dir, "test", rep.Profile, testNames); err != nil {
-			return nil, err
+			return nil, "", err
 		} else if own == "" {
 			ids = slices.Delete(ids, i, i+1)
+			refusedTest = refused
 		}
 	default:
 		ids = slices.Delete(ids, i, i+1)
 	}
-	return ids, nil
+	return ids, refusedTest, nil
 }
 
 func hookDef(profile, id string) (def, bool) {
@@ -371,7 +372,7 @@ func sharedHook(id string) bool {
 // localBlock renders a `repo: local` block (repo items at column indent) for
 // the unmet hook obligations, skipping ids already used.
 func localBlock(dir string, rep audit.Report, used map[string]bool, indent int, res *Result) (string, error) {
-	ids, err := wanted(dir, rep)
+	ids, refusedTest, err := wanted(dir, rep)
 	if err != nil {
 		return "", err
 	}
@@ -380,6 +381,9 @@ func localBlock(dir string, rep audit.Report, used map[string]bool, indent int, 
 	pkg, err := pkgmgr.ReadPackage(filepath.Join(dir, sub))
 	if err != nil {
 		return "", err
+	}
+	if refusedTest != "" {
+		res.Findings = append(res.Findings, uncachedFinding("test", refusedTest))
 	}
 	var b strings.Builder
 	for _, id := range ids {
