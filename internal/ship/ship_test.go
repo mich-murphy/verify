@@ -276,3 +276,19 @@ func TestBody(t *testing.T) {
 		t.Error("minimal body")
 	}
 }
+
+func TestRejectedPushShowsTheHooksOwnFailureLine(t *testing.T) {
+	e := newEnv(t)
+	hook := filepath.Join(e.dir, ".git", "hooks", "pre-push")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nfor i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo \"noise $i\" >&2; done\necho 'pre-push: lint failed in a.go' >&2\nexit 1\n"), 0o700); err != nil { // #nosec G306 -- fake hook in test temp directory
+		t.Fatal(err)
+	}
+	rep, err := Run(t.Context(), e.opts(false))
+	if err == nil {
+		t.Fatal("push should have been rejected")
+	}
+	detail := rep.Steps[0].Detail
+	if !strings.Contains(detail, "pre-push: lint failed in a.go") || strings.Contains(detail, "noise 1\n") || strings.Contains(detail, "noise 2\n") {
+		t.Fatalf("want the last ten stderr lines, got:\n%s", detail)
+	}
+}
