@@ -162,7 +162,7 @@ func TestShipEditsExistingPRAndUsesLease(t *testing.T) {
 	if got := git(t, e.origin, "rev-parse", "refs/heads/feature"); got != e.sha {
 		t.Fatalf("remote at %s", got)
 	}
-	if log := e.log(t); !strings.Contains(log, "pr edit 7 --repo github.com/example/project --body-file") || strings.Contains(log, "pr create") {
+	if log := e.log(t); !strings.Contains(log, "pr edit 7 --repo github.com/example/project --title first --body-file") || strings.Contains(log, "pr create") {
 		t.Fatalf("log:\n%s", log)
 	}
 	if rep.PRURL != "https://example.test/pr/7" {

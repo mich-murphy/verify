@@ -123,7 +123,7 @@ func TestShipSuccessAndDryRun(t *testing.T) {
 		t.Fatalf("ship: %d %+v", code, r)
 	}
 	calls := e.ghCalls()
-	for _, want := range []string{"pr edit 7 --repo github.com/example/project --body-file", "statuses/" + e.sha, "context=verify/verified"} {
+	for _, want := range []string{"pr edit 7 --repo github.com/example/project --title change a.go --body-file", "statuses/" + e.sha, "context=verify/verified"} {
 		if !strings.Contains(calls, want) {
 			t.Errorf("gh calls lack %q:\n%s", want, calls)
 		}
@@ -395,5 +395,17 @@ func TestShipDryRunPrintsPlannedTitleWithoutCallingReviewer(t *testing.T) {
 	r, code := runCLI(t, "ship", "--dry-run")
 	if code != 0 || calls(t, counter) != 0 || !strings.Contains(r.Message, `title "change a.go"`) || !strings.Contains(r.Message, `description "change a.go"`) {
 		t.Fatalf("%d calls %d %+v", code, calls(t, counter), r)
+	}
+}
+
+func TestShipUpdatesTheTitleOfAnExistingPR(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	fakeReviewer(t, describeOut)
+	if r, code := runCLI(t, "ship"); code != 0 {
+		t.Fatalf("ship: %d %+v", code, r)
+	}
+	if !strings.Contains(e.ghCalls(), "pr edit 7 --repo github.com/example/project --title Add the greeting --body-file") {
+		t.Fatalf("edit args:\n%s", e.ghCalls())
 	}
 }

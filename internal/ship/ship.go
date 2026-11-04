@@ -153,7 +153,7 @@ func prStep(ctx context.Context, o Options, rep *Report) (string, error) {
 	}
 
 	if pr.State == "OPEN" && pr.Number > 0 {
-		if _, err := gh(ctx, o, "pr", "edit", fmt.Sprint(pr.Number), "--repo", "github.com/"+o.Target, "--body-file", bodyFile); err != nil {
+		if _, err := gh(ctx, o, "pr", "edit", fmt.Sprint(pr.Number), "--repo", "github.com/"+o.Target, "--title", o.Title, "--body-file", bodyFile); err != nil {
 			return "", err
 		}
 		rep.PRURL = pr.URL
