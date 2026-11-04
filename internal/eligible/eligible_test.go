@@ -223,3 +223,19 @@ func TestAssessCheckSkippedStepIsNotPassing(t *testing.T) {
 		t.Fatal("a check whose hooks were skipped must not pass")
 	}
 }
+
+func TestBranchRecordWithoutParkedFieldIsEligible(t *testing.T) {
+	st := state.Open(t.TempDir())
+	raw := `{"schema":"verify.branch/1","name":"feature","review_attempts":2,"findings":[],"decisions":[]}`
+	if err := state.WriteAtomic(st.BranchPath("feature"), []byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	br, err := st.LoadBranch("feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Evaluate(Input{SHA: sha, MergeBase: sha, Lane: "standard", Check: chk("standard"), Review: rev(), Branch: br})
+	if !got.Eligible || got.NextAction != "run verify ship" {
+		t.Fatalf("%+v", got)
+	}
+}

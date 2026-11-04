@@ -426,3 +426,36 @@ func TestReviewExplicitChoiceDoesNotFallBack(t *testing.T) {
 		t.Fatalf("code %d codex calls %d", code, calls(t, codex))
 	}
 }
+
+func TestReviewBudgetIsPerRunNotPerBranch(t *testing.T) {
+	repo := checked(t)
+	counter := fakeReviewer(t, cleanOut)
+	for n := 1; n <= 3; n++ {
+		if n > 1 {
+			commit(t, repo, "a.go", "package a\n\nvar X = "+strconv.Itoa(n)+"\n")
+			passCheck(t, repo)
+		}
+		r, code := runCLI(t, "review", "--reviewer", "claude")
+		if code != ExitOK || r.Status != state.StatusPass || calls(t, counter) != n {
+			t.Fatalf("review %d on a new SHA: code %d calls %d %+v", n, code, calls(t, counter), r)
+		}
+	}
+}
+
+func TestStatusHasNoBranchReviewBudget(t *testing.T) {
+	checked(t)
+	fakeReviewer(t, cleanOut)
+	if _, code := runCLI(t, "review", "--reviewer", "claude"); code != ExitOK {
+		t.Fatalf("review: %d", code)
+	}
+	var out, errb bytes.Buffer
+	Run([]string{"status"}, nil, &out, &errb)
+	for _, gone := range []string{"review budget", "logical reviews", "PARKED"} {
+		if strings.Contains(out.String(), gone) {
+			t.Fatalf("status still prints %q:\n%s", gone, out.String())
+		}
+	}
+	if !strings.Contains(out.String(), "review subprocess attempts: 1 total") {
+		t.Fatalf("status lost the attempts line:\n%s", out.String())
+	}
+}

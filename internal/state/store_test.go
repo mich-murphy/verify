@@ -410,3 +410,22 @@ func TestUncontendedLockIsSilentAndRecordsPid(t *testing.T) {
 		t.Fatalf("lock file holds %q", b)
 	}
 }
+
+func TestLoadBranchAcceptsRecordsWrittenBeforeThePerRunBudget(t *testing.T) {
+	s := Open(t.TempDir())
+	legacy := `{"schema":"verify.branch/1","name":"feature","review_calls":2,"review_attempts":3,"findings":[],"parked":true,"decisions":[]}`
+	if err := WriteAtomic(s.BranchPath("feature"), []byte(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.LoadBranch("feature")
+	if err != nil || b.ReviewAttempts != 3 {
+		t.Fatalf("legacy record: %+v %v", b, err)
+	}
+	if err := s.UpdateBranch(t.Context(), "feature", func(*Branch) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(s.BranchPath("feature"))
+	if err != nil || strings.Contains(string(data), "parked") || strings.Contains(string(data), "review_calls") {
+		t.Fatalf("legacy fields survive a save: %s %v", data, err)
+	}
+}
