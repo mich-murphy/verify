@@ -21,20 +21,23 @@ func (v *view) describe(env *Env, dry bool) (state.Description, *viewErr) {
 	if d := v.recs.br.Description; d != nil && d.SHA == v.sha {
 		return *d, nil
 	}
-	msgs, _ := v.repo.Messages(env.Ctx, v.loaded.MergeBase, v.sha)
+	msgs, merr := v.repo.Messages(env.Ctx, v.loaded.MergeBase, v.sha)
 	subjects := make([]string, len(msgs))
 	for i, m := range msgs {
 		subjects[i], _, _ = strings.Cut(m, "\n")
 	}
 	fallback := func(reason string) state.Description {
 		title, body := ship.FallbackDescription(v.branch, subjects, reason)
-		return state.Description{SHA: v.sha, Title: title, Body: body, Source: state.DescribedByCommits, Reason: reason}
+		return state.Description{SHA: v.sha, Title: title, Body: body, Source: state.DescribedByCommits}
 	}
 	if dry {
 		return fallback("dry run, reviewer not called"), nil
 	}
-	if len(msgs) == 0 {
-		return fallback(reasonUnavailable), nil
+	switch {
+	case merr != nil:
+		return fallback("commit messages unavailable"), nil
+	case len(msgs) == 0:
+		return fallback("no commit messages"), nil
 	}
 	rv, other, err := selectReviewers(cmp.Or(os.Getenv("VERIFY_REVIEWER"), "auto"))
 	if err != nil {
