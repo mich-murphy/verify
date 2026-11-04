@@ -543,7 +543,10 @@ Verify then:
    branch tip, and pushes the exact SHA to that same destination with an explicit force-with-lease.
    Multiple push destinations or chained URL rewrites that could change the target fail closed.
 2. Opens or updates the PR with `gh` targeting that GitHub repository and host, with a body that
-   summarises executed steps, effective findings and notes.
+   summarises executed steps, effective findings and notes. The PR is opened ready for review with
+   a title and description composed from the commits and diff by the reviewer CLI (no review
+   budget), falling back to the commit messages. The description comes first in the body, then the
+   evidence.
 3. Sets `verify/verified=success` on that SHA in the same repository through `gh api`.
 
 Local evidence and reviewer claims are distinguished in the PR body. Verify does not claim remote

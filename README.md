@@ -62,7 +62,7 @@ Exit codes: `0` passed, `1` blocking findings, `2` usage or config error,
 | `verify check [--sha REF] [--fast]` | Run guards, the setup audit and repository hooks. Reuses a passing check for an identical tree. |
 | `verify review [--intent FILE] [--reviewer auto\|claude\|codex]` | One fresh review, or a delta review after a repair. |
 | `verify verify` | Run configured CLI scenarios when a declared surface changed. |
-| `verify ship [--dry-run] [--remote NAME]` | Push the checked commit, open or update the PR, set `verify/verified`. |
+| `verify ship [--dry-run] [--remote NAME]` | Push the checked commit, open or update the PR (opened ready, with a title and description composed from the commits and diff by the reviewer CLI, or from the commit messages when it is unavailable), set `verify/verified`. |
 | `verify decide approve\|accept ID\|waive OBLIGATION --reason TEXT` | Record a human decision for the current commit. |
 | `verify status` | Show the lane, results, open findings and the next action. Exits 1 when findings block and 3 when blocked. |
 | `verify setup [--apply]` | Audit the quality setup with notes on hook scope, always-run and uncacheable hooks. Without prek config it prints the YAML that `--apply` would write. |

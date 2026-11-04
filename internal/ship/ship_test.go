@@ -247,9 +247,6 @@ func TestInvalidArgs(t *testing.T) {
 	if err := e.repo.PushLease(t.Context(), "origin", "feature", "HEAD", ""); err == nil {
 		t.Fatal("sha")
 	}
-	if s, err := e.repo.FirstSubject(t.Context(), e.sha, e.sha); err != nil || s != "" {
-		t.Fatalf("%q %v", s, err)
-	}
 }
 
 func TestBody(t *testing.T) {

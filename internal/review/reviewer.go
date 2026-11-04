@@ -163,6 +163,7 @@ type Claude struct {
 	Model   string
 	Bin     string // default "claude"
 	Timeout time.Duration
+	Task    Task // zero value reviews
 	// Capture, when set, receives the CLI's complete stdout wrapper. Only the
 	// evaluation harness sets it.
 	Capture func(wrapper []byte)
@@ -172,14 +173,17 @@ type Claude struct {
 func (c *Claude) Name() string { return "claude" }
 
 // ClaudeArgs is the argv after the binary name.
-func ClaudeArgs(model string) []string {
-	args := []string{"-p", "--output-format", "json", "--json-schema", Schema}
+func ClaudeArgs(model string) []string { return claudeArgs(model, Task{}) }
+
+func claudeArgs(model string, t Task) []string {
+	t = t.orReview()
+	args := []string{"-p", "--output-format", "json", "--json-schema", t.Schema}
 	if model != "" {
 		args = append(args, "--model", model)
 	}
 	return append(args,
 		"--tools", "", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands",
-		"--no-session-persistence", "--system-prompt", SystemPrompt,
+		"--no-session-persistence", "--system-prompt", t.System,
 	)
 }
 
@@ -191,7 +195,7 @@ func (c *Claude) Run(ctx context.Context, packet []byte) ([]byte, Usage, error) 
 	}
 	defer s.close()
 	bin := orDefault(c.Bin, "claude")
-	stdout, stderr, err := s.proc(ctx, c.Timeout, bin, ClaudeArgs(c.Model), packet, s.env("CLAUDE_CONFIG_DIR"))
+	stdout, stderr, err := s.proc(ctx, c.Timeout, bin, claudeArgs(c.Model, c.Task), packet, s.env("CLAUDE_CONFIG_DIR"))
 	if err != nil {
 		if errors.Is(err, ErrInvalidOutput) {
 			return nil, Usage{}, err
@@ -236,6 +240,7 @@ type Codex struct {
 	Model   string
 	Bin     string // default "codex"
 	Timeout time.Duration
+	Task    Task // zero value reviews
 	// Capture, when set, receives the CLI's JSONL event stream. Only the
 	// evaluation harness sets it.
 	Capture func(wrapper []byte)
@@ -289,11 +294,12 @@ func (c *Codex) Run(ctx context.Context, packet []byte) ([]byte, Usage, error) {
 		return nil, Usage{}, err
 	}
 	defer s.close()
+	task := c.Task.orReview()
 	schemaFile, outFile := filepath.Join(s.root, "schema.json"), filepath.Join(s.root, "out.json")
-	if err := os.WriteFile(schemaFile, []byte(Schema), 0o600); err != nil {
+	if err := os.WriteFile(schemaFile, []byte(task.Schema), 0o600); err != nil {
 		return nil, Usage{}, err
 	}
-	stdin := append([]byte(SystemPrompt+"\n\n=== PACKET ===\n"), packet...)
+	stdin := append([]byte(task.System+"\n\n=== PACKET ===\n"), packet...)
 	stdout, stderr, err := s.proc(ctx, c.Timeout, orDefault(c.Bin, "codex"),
 		CodexArgs(s.cwd, c.Model, schemaFile, outFile), stdin, s.env("CODEX_HOME"))
 	if err != nil {

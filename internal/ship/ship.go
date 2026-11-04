@@ -68,7 +68,7 @@ func actions(o Options) []action {
 	ref := "refs/heads/" + o.Branch
 	return []action{
 		{"push", fmt.Sprintf("git push --force-with-lease=%s:<remote value> %s %s:%s", ref, o.Remote, o.SHA, ref), pushStep},
-		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create (title %q, base %s) or gh pr edit", o.Branch, o.Target, o.Title, o.Base), prStep},
+		{"pr", fmt.Sprintf("gh pr view %s --repo github.com/%s, then gh pr create (title %q, base %s, description %q) or gh pr edit", o.Branch, o.Target, o.Title, o.Base, firstLine(o.Body)), prStep},
 		{"status", fmt.Sprintf("gh api --hostname github.com -X POST repos/%s/statuses/%s -f state=success -f context=verify/verified", o.Target, o.SHA), statusStep},
 	}
 }
@@ -255,3 +255,8 @@ func githubPath(raw string) (string, error) {
 	return strings.TrimPrefix(u.Path, "/"), nil
 }
 func short(s string) string { return s[:min(12, len(s))] }
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return line
+}

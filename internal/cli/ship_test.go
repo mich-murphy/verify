@@ -280,7 +280,7 @@ func TestShipDryRunPrintsPlanBeforeRemoteError(t *testing.T) {
 	var at []int
 	for _, want := range []string{
 		"push planned: git push --force-with-lease=refs/heads/feature:<remote value> origin " + e.sha + ":refs/heads/feature",
-		`pr planned: gh pr view feature --repo github.com/<owner/repo>, then gh pr create (title "change a.go", base main) or gh pr edit`,
+		`pr planned: gh pr view feature --repo github.com/<owner/repo>, then gh pr create (title "change a.go", base main, description "change a.go") or gh pr edit`,
 		"status planned: gh api --hostname github.com -X POST repos/<owner/repo>/statuses/" + e.sha + " -f state=success -f context=verify/verified",
 		"remote failed: selected remote is not a GitHub repository",
 	} {
@@ -303,7 +303,7 @@ echo "$*" >> "$GH_LOG"
 case "$1 $2" in
 "pr view") exit 1 ;;
 "pr create")
-	while [ $# -gt 0 ]; do [ "$1" = --body-file ] && cat "$2" > "$GH_BODY"; shift; done
+	while [ $# -gt 0 ]; do [ "$1" = --body-file ] && /bin/cat "$2" > "$GH_BODY"; shift; done
 	echo https://example.test/pr/9
 	;;
 esac

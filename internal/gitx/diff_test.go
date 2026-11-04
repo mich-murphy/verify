@@ -118,12 +118,6 @@ func TestReviewHelpers(t *testing.T) {
 	if msgs, err = repo.Messages(ctx, "HEAD", "HEAD"); err != nil || len(msgs) != 0 {
 		t.Fatal(msgs, err)
 	}
-	if s, err := repo.FirstSubject(ctx, base, "HEAD"); err != nil || s != "one subject" {
-		t.Fatalf("%q %v", s, err)
-	}
-	if s, err := repo.FirstSubject(ctx, "HEAD", "HEAD"); err != nil || s != "" {
-		t.Fatalf("%q %v", s, err)
-	}
 	for _, bad := range []string{"--bad", "nope"} {
 		if _, err := repo.DiffRange(ctx, bad, "HEAD"); err == nil {
 			t.Fatal("DiffRange accepted", bad)
@@ -136,12 +130,6 @@ func TestReviewHelpers(t *testing.T) {
 		}
 		if _, err := repo.Messages(ctx, "HEAD", bad); err == nil {
 			t.Fatal("Messages accepted", bad)
-		}
-		if _, err := repo.FirstSubject(ctx, bad, "HEAD"); err == nil {
-			t.Fatal("FirstSubject accepted", bad)
-		}
-		if _, err := repo.FirstSubject(ctx, "HEAD", bad); err == nil {
-			t.Fatal("FirstSubject accepted", bad)
 		}
 	}
 }
