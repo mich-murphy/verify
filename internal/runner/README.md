@@ -14,7 +14,9 @@ without appropriate handling.
 
 On macOS/Linux a command starts in its own process group. Timeout and
 cancellation send TERM and then KILL with bounded reaping and settlement.
-A parent that exits with live owned children fails; zombies are not live.
+A parent that exits 0 may leave owned children for up to 2 seconds to wind
+down. If any are still live after that, or the parent failed, the command fails
+and the group is terminated; zombies are not live.
 `Settled=false` means cleanup was incomplete. The runner rejects further work.
 Check and verify durably create a `<worktree>.quarantine` marker under their
 worktree lock **before** reset, audit, prepare, setup, or scenarios run. Only

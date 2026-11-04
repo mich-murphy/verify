@@ -45,6 +45,23 @@ func (r *Runner) groupAlive(ctx context.Context, group int) (bool, error) {
 	return inspectGroup(ctx, group, r.process.table)
 }
 
+// descendantGrace is how long helpers left behind by a successful command may
+// keep winding down. It matches cmd.WaitDelay, the allowance for inherited pipes.
+const descendantGrace = 2 * time.Second
+
+// awaitGroupExit reports whether the group still has live members once grace
+// has elapsed. Members that exit sooner end the wait early.
+func (r *Runner) awaitGroupExit(ctx context.Context, group int, grace time.Duration) (bool, error) {
+	deadline := time.Now().Add(grace)
+	for {
+		alive, err := r.groupAlive(ctx, group)
+		if err != nil || !alive || !time.Now().Before(deadline) {
+			return alive, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func (r *Runner) execute(parent context.Context, t Command, result Result) Result {
 	ctx, cancel := context.WithTimeout(parent, t.Timeout)
 	defer cancel()
@@ -66,7 +83,7 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 	// Bound inherited output pipe lifetimes when a parent exits before its child. It must
 	// outlast scheduler stalls under load: 50ms failed healthy concurrent git calls with
 	// "WaitDelay expired before I/O complete" about 3 times in 100 runs.
-	cmd.WaitDelay = 2 * time.Second
+	cmd.WaitDelay = descendantGrace
 	stdout, stderr := newCapture(r.config.OutputLimit), newCapture(r.config.OutputLimit)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -103,9 +120,15 @@ func (r *Runner) execute(parent context.Context, t Command, result Result) Resul
 		result.Error += "; quarantine: direct child not reaped"
 	}
 	// Cleanup must outlive task cancellation but is itself strictly bounded.
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), r.config.SettleTimeout+time.Second)
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(ctx), r.config.SettleTimeout+descendantGrace+time.Second)
 	defer cleanupCancel()
-	alive, checkErr := r.groupAlive(cleanupCtx, cmd.Process.Pid)
+	// Only a command that finished by itself with exit 0 earns the grace; a
+	// failed, cancelled or timed-out one is judged on the first probe.
+	grace := time.Duration(0)
+	if result.Status == Pass {
+		grace = descendantGrace
+	}
+	alive, checkErr := r.awaitGroupExit(cleanupCtx, cmd.Process.Pid, grace)
 	if alive || checkErr != nil {
 		// Even a real exit 1 cannot stand in for lifecycle failure.
 		result.ProcessError = nil
