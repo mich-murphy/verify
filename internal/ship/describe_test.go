@@ -6,7 +6,7 @@ import (
 )
 
 func TestFallbackDescription(t *testing.T) {
-	const note = "Description generated from commit messages (reviewer CLI unavailable)"
+	const note = "Description generated from commit messages (diff too large to describe)"
 	for _, tc := range []struct {
 		name         string
 		branch       string
@@ -18,7 +18,7 @@ func TestFallbackDescription(t *testing.T) {
 		{"no commits fall back to the branch", "fix-login", nil, "fix login", note},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			title, descr := FallbackDescription(tc.branch, tc.subjects)
+			title, descr := FallbackDescription(tc.branch, tc.subjects, "diff too large to describe")
 			if title != tc.title || descr != tc.descr {
 				t.Fatalf("got %q / %q, want %q / %q", title, descr, tc.title, tc.descr)
 			}

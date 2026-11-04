@@ -131,6 +131,7 @@ type Description struct {
 	Title  string `json:"title"`
 	Body   string `json:"body"`
 	Source string `json:"source"`
+	Reason string `json:"reason,omitempty"` // why the reviewer CLI did not write it; empty when it did
 }
 
 // Branch is verify.branch/1: per-branch review state.
