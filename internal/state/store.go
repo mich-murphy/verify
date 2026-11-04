@@ -352,8 +352,14 @@ func (s *Store) LoadVerify(sha string) (*VerifyRecord, error) {
 
 // LoadBranch reads the branch state; a missing file yields a fresh Branch.
 func (s *Store) LoadBranch(name string) (*Branch, error) {
-	var b Branch
-	err := readJSON(s.BranchPath(name), SchemaBranch, &b, func() string { return b.Schema })
+	// Records written before the budget became per run carry two fields that no longer exist.
+	var disk struct {
+		Branch
+		LegacyReviewCalls int  `json:"review_calls"`
+		LegacyParked      bool `json:"parked"`
+	}
+	err := readJSON(s.BranchPath(name), SchemaBranch, &disk, func() string { return disk.Schema })
+	b := disk.Branch
 	if errors.Is(err, ErrNotFound) {
 		return &Branch{Schema: SchemaBranch, Name: name}, nil
 	}

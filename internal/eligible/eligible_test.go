@@ -114,26 +114,6 @@ func TestEvaluate(t *testing.T) {
 			SHA: sha, Check: chk("standard"), Review: rev(),
 			Branch: &state.Branch{Findings: []state.Finding{blk("F1", "review")}, Decisions: []state.Decision{dec("accept", "F1")}},
 		}, true, "verify ship", "", 0},
-		{"parked without approve", Input{SHA: sha, Check: chk("standard"), Review: rev(), Branch: &state.Branch{Parked: true}}, false, "approve", "parked", 0},
-		{"parked docs without approve", Input{SHA: sha, Check: chk("docs"), Branch: &state.Branch{Parked: true}}, false, "approve", "parked", 0},
-		{"parked with approve and no review record", Input{
-			SHA: sha, Check: chk("standard"),
-			Branch: &state.Branch{Parked: true, Decisions: []state.Decision{dec("approve", "")}},
-		}, true, "verify ship", "", 0},
-		{"parked with approve, finding still open", Input{
-			SHA: sha, Check: chk("standard"),
-			Branch: &state.Branch{
-				Parked: true, Findings: []state.Finding{blk("F1", "review")},
-				Decisions: []state.Decision{dec("approve", "")},
-			},
-		}, false, "decide accept F1", "F1", 1},
-		{"parked with approve, finding accepted", Input{
-			SHA: sha, Check: chk("standard"),
-			Branch: &state.Branch{
-				Parked: true, Findings: []state.Finding{{ID: "F1", Source: "review", Severity: "block", State: "accepted"}},
-				Decisions: []state.Decision{dec("approve", ""), dec("accept", "F1")},
-			},
-		}, true, "verify ship", "", 0},
 		{"signoff without approve", Input{SHA: sha, Check: chk("signoff"), Review: rev()}, false, "decide approve", "signoff", 0},
 		{"signoff approved", Input{
 			SHA: sha, Check: chk("signoff"), Review: rev(),

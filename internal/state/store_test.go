@@ -34,13 +34,13 @@ func TestProductNamespace(t *testing.T) {
 	}
 	legacy := &Store{Dir: filepath.Join(commonDir, "gate")}
 	if err := legacy.UpdateBranch(t.Context(), "feature", func(b *Branch) error {
-		b.Parked = true
+		b.ReviewAttempts = 1
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
 	current, err := Open(commonDir).LoadBranch("feature")
-	if err != nil || current.Parked {
+	if err != nil || current.ReviewAttempts != 0 {
 		t.Fatalf("legacy state must not be imported: %+v %v", current, err)
 	}
 	if _, err := os.Stat(legacy.BranchPath("feature")); err != nil {
@@ -112,8 +112,8 @@ func TestReviewAttemptValidation(t *testing.T) {
 			t.Fatalf("invalid attempt count %d: %v", n, err)
 		}
 	}
-	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.ReviewCalls = 1; return nil }); !errors.Is(err, ErrCorrupt) {
-		t.Fatalf("branch with fewer attempts than reviews: %v", err)
+	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.ReviewAttempts = -1; return nil }); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("branch with negative attempts: %v", err)
 	}
 }
 
@@ -127,7 +127,6 @@ func TestBranch(t *testing.T) {
 		t.Fatal(b.NextFindingID())
 	}
 	err = s.UpdateBranch(t.Context(), "feat/x", func(b *Branch) error {
-		b.ReviewCalls++
 		b.ReviewAttempts++
 		b.Findings = append(b.Findings, Finding{ID: "F1", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "one"}, Finding{ID: "F7", Source: SourceReview, Severity: SeverityNote, State: StateOpen, Message: "seven"})
 		return nil
@@ -136,7 +135,7 @@ func TestBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err = s.LoadBranch("feat/x")
-	if err != nil || b.ReviewCalls != 1 || b.NextFindingID() != "F8" || b.Schema != SchemaBranch {
+	if err != nil || b.ReviewAttempts != 1 || b.NextFindingID() != "F8" || b.Schema != SchemaBranch {
 		t.Fatalf("%+v %v", b, err)
 	}
 	if strings.Contains(filepath.Base(s.BranchPath("a/b")), "/") {

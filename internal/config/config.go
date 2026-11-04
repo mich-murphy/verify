@@ -49,8 +49,6 @@ func (d Duration) Std() time.Duration { return time.Duration(d) }
 const (
 	// SignoffLines is the changed-line count above which a change needs sign-off.
 	SignoffLines = 400
-	// ReviewCalls is the review budget per branch.
-	ReviewCalls = 2
 )
 
 // Stages are the prek stages `verify check` runs, in order.

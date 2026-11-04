@@ -39,11 +39,10 @@ func TestBattlePersistedFindingIdentityCannotDowngrade(t *testing.T) {
 	if got.Eligible || !strings.Contains(strings.Join(got.Missing, " "), "conflicting immutable identity") {
 		t.Fatalf("inconsistent same-ID finding erased immutable blocker: %+v", got)
 	}
-	br.Parked = true
 	br.Decisions = []state.Decision{dec(state.DecideAccept, "F1"), dec(state.DecideApprove, "")}
 	got = Evaluate(Input{SHA: sha, MergeBase: sha, Lane: "standard", Check: chk("standard"), Review: loaded, Branch: br})
 	if got.Eligible || !strings.Contains(strings.Join(got.Missing, " "), "conflicting immutable identity") {
-		t.Fatalf("acceptance and parked approval bypassed inconsistent identity: %+v", got)
+		t.Fatalf("acceptance and approval bypassed inconsistent identity: %+v", got)
 	}
 }
 

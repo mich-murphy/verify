@@ -98,7 +98,7 @@ func runStatus(env *Env) int {
 	if len(v.elig.Blocking) > 0 {
 		res.Status = "blocked-by-findings"
 	}
-	lines := v.recs.summary(config.ReviewCalls)
+	lines := v.recs.summary()
 	lines = append(lines, "SHA: "+v.sha)
 	if v.recs.chk != nil {
 		lines = append(lines, "check scope: "+v.recs.chk.Scope+" "+v.recs.chk.ScopeReason)
@@ -196,19 +196,15 @@ func (r records) stepsOrNil() []state.Step {
 	return r.chk.Steps
 }
 
-func (r records) summary(budget int) []string {
+func (r records) summary() []string {
 	lines := []string{
 		"check:  " + recStatus(r.chk, func(x *state.CheckRecord) string { return x.Status }),
 		"review: " + recStatus(r.rev, func(x *state.ReviewRecord) string { return x.Status }),
 		"verify: " + recStatus(r.ver, func(x *state.VerifyRecord) string { return x.Verdict }),
-		fmt.Sprintf("review budget: %d/%d logical reviews used", r.br.ReviewCalls, budget),
 		fmt.Sprintf("review subprocess attempts: %d total", r.br.ReviewAttempts),
 	}
 	if r.rev != nil {
 		lines = append(lines, fmt.Sprintf("review attempts for SHA: %d", r.rev.Attempts))
-	}
-	if r.br.Parked {
-		lines = append(lines, "branch is PARKED")
 	}
 	return lines
 }

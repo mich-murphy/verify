@@ -259,8 +259,8 @@ func validateBranch(b *Branch, name string) error {
 	if name == "" || b.Name != name {
 		return invalid("branch identity mismatch: %q vs %q", b.Name, name)
 	}
-	if b.ReviewCalls < 0 || b.ReviewCalls > 2 || b.ReviewAttempts < b.ReviewCalls || b.LastReviewedSHA != "" && !validSHA(b.LastReviewedSHA) {
-		return invalid("invalid branch review budget/history")
+	if b.ReviewAttempts < 0 || b.LastReviewedSHA != "" && !validSHA(b.LastReviewedSHA) {
+		return invalid("invalid branch review history")
 	}
 	if err := validateFindings(b.Findings); err != nil {
 		return err

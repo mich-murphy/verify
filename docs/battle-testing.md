@@ -40,7 +40,7 @@ framework, persistent cache, dependency, schema or database was justified.
 
 - Conflicting same-ID branch findings could replace immutable review severity/claim facts.
   Projection now changes only coherent disposition; current conflicting evidence fails closed,
-  including with acceptance/parked approval. PR bodies retain accepted guard claims and raw results.
+  including with acceptance and approval. PR bodies retain accepted guard claims and raw results.
 - Actual Git quoted mode/binary headers and trailing whitespace lost exact path identity.
   Parsing now preserves them or rejects unsupported forms. Nonregular committed policy stays an
   error; only the generated guard intentionally skips nonregular base content. Generated regular
@@ -158,7 +158,7 @@ review, lane and guard, because uncovered mutants are the gap. Pointers to missi
 - `lane.go:49` `IsManifestOrLockfile` is exercised only from `internal/check`, not by a lane test.
 - `response.go:101,103` no test sends a negative line, an empty claim or an over-long claim.
 - `reviewer.go:265,267` Codex `error` and `turn.failed` events with an empty message.
-- `eligible.go:276` the non-parked Sign-off approval requirement.
+- `eligible.go:276` the Sign-off approval requirement.
 - `guard/suppress.go:38,39` the Go test-pattern and non-empty `what` branches.
 - `suppress.go:18-22` and `prompt.go:30-36` are string concatenations of `+`; these are noise, not missing tests.
 

@@ -121,11 +121,9 @@ type Decision struct {
 type Branch struct {
 	Schema          string     `json:"schema"`
 	Name            string     `json:"name"`
-	ReviewCalls     int        `json:"review_calls"`
 	ReviewAttempts  int        `json:"review_attempts"`
 	Findings        []Finding  `json:"findings"`
 	LastReviewedSHA string     `json:"last_reviewed_sha,omitempty"`
-	Parked          bool       `json:"parked"`
 	Decisions       []Decision `json:"decisions"`
 }
 
