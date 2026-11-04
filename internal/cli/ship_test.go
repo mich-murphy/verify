@@ -423,3 +423,18 @@ func TestShipFallbackNoteNamesInvalidReviewerOutput(t *testing.T) {
 		t.Fatalf("body:\n%s", body())
 	}
 }
+
+func TestShipWithNoCommitsNamesThatAndCallsNoReviewer(t *testing.T) {
+	e := newShipEnv(t)
+	gitRun(t, e.repo, "reset", "-q", "--hard", "main")
+	e.sha = strings.TrimSpace(gitOut(t, e.repo, "rev-parse", "HEAD"))
+	e.records(t, "standard", true)
+	body := e.shipCreatesPR(t)
+	counter := fakeReviewer(t, describeOut)
+	if r, code := runCLI(t, "ship"); code != 0 {
+		t.Fatalf("ship: %d %+v", code, r)
+	}
+	if !strings.HasPrefix(body(), "Description generated from commit messages (no commit messages)\n\n## Verify\n") || calls(t, counter) != 0 {
+		t.Fatalf("reviewer calls %d, body:\n%s", calls(t, counter), body())
+	}
+}
