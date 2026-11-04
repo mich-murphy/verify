@@ -409,3 +409,17 @@ func TestShipUpdatesTheTitleOfAnExistingPR(t *testing.T) {
 		t.Fatalf("edit args:\n%s", e.ghCalls())
 	}
 }
+
+func TestShipFallbackNoteNamesInvalidReviewerOutput(t *testing.T) {
+	e := newShipEnv(t)
+	e.records(t, "standard", true)
+	body := e.shipCreatesPR(t)
+	fakeReviewer(t, `{"title":"","description":""}`)
+	if r, code := runCLI(t, "ship"); code != 0 {
+		t.Fatalf("ship: %d %+v", code, r)
+	}
+	want := "change a.go\n\nDescription generated from commit messages (reviewer output invalid)\n\n## Verify\n"
+	if !strings.HasPrefix(body(), want) {
+		t.Fatalf("body:\n%s", body())
+	}
+}
