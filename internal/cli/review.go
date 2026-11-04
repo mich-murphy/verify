@@ -128,17 +128,20 @@ func runPlannedReview(env *Env, repo *gitx.Repo, st *state.Store, rv, fallback r
 	return finishReview(env, st, rv, fallback, plan, name, sha, mergeBase, laneName)
 }
 
+// maxCallsPerRun bounds the reviewer subprocess calls of one verify review run, fallback included.
+const maxCallsPerRun = 2
+
 func finishReview(env *Env, st *state.Store, rv, fallback review.Reviewer, plan reviewPlan, name, sha, mergeBase, laneName string) int {
 	blocked := func(msg, next string) int { return env.Fail("review", ExitBlocked, msg, next) }
 	countAttempt := func() error {
 		return st.UpdateBranch(env.Ctx, name, func(b *state.Branch) error { b.ReviewAttempts++; return nil })
 	}
-	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt)
+	resp, used, attempts, err := callReviewer(env, rv, plan, countAttempt, maxCallsPerRun)
 	fallbackFrom := ""
 	if errors.Is(err, review.ErrUnavailable) && used == 0 && fallback != nil {
 		fallbackFrom, rv = rv.Name(), fallback
 		var more int
-		resp, used, more, err = callReviewer(env, rv, plan, countAttempt)
+		resp, used, more, err = callReviewer(env, rv, plan, countAttempt, maxCallsPerRun-attempts)
 		attempts += more
 	}
 	if err != nil {
@@ -308,8 +311,8 @@ func reviewReason(b *state.Branch, id string) string {
 
 // callReviewer counts subprocess attempts separately from the one review.
 // Persist each attempt before execution; a crash cannot erase invocation history.
-func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func() error) (resp *review.Response, used, attempts int, err error) {
-	for range 2 {
+func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func() error, limit int) (resp *review.Response, used, attempts int, err error) {
+	for range limit {
 		if err := beforeAttempt(); err != nil {
 			return nil, used, attempts, err
 		}
@@ -332,5 +335,5 @@ func callReviewer(env *Env, rv review.Reviewer, p reviewPlan, beforeAttempt func
 		}
 		err = rerr
 	}
-	return nil, used, attempts, fmt.Errorf("reviewer output invalid after retry: %w", err)
+	return nil, used, attempts, fmt.Errorf("reviewer output invalid after %d call(s): %w", attempts, err)
 }
