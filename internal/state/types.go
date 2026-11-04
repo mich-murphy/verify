@@ -117,14 +117,31 @@ type Decision struct {
 	Coverage *DecisionCoverage `json:"coverage,omitempty"`
 }
 
+// Sources of a PR description.
+const (
+	DescribedByClaude  = "claude"
+	DescribedByCodex   = "codex"
+	DescribedByCommits = "commits"
+)
+
+// Description is the PR title and body composed for one SHA. It is not a review
+// and spends nothing on the review budget.
+type Description struct {
+	SHA    string `json:"sha"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	Source string `json:"source"`
+}
+
 // Branch is verify.branch/1: per-branch review state.
 type Branch struct {
-	Schema          string     `json:"schema"`
-	Name            string     `json:"name"`
-	ReviewAttempts  int        `json:"review_attempts"`
-	Findings        []Finding  `json:"findings"`
-	LastReviewedSHA string     `json:"last_reviewed_sha,omitempty"`
-	Decisions       []Decision `json:"decisions"`
+	Schema          string       `json:"schema"`
+	Name            string       `json:"name"`
+	ReviewAttempts  int          `json:"review_attempts"`
+	Findings        []Finding    `json:"findings"`
+	LastReviewedSHA string       `json:"last_reviewed_sha,omitempty"`
+	Decisions       []Decision   `json:"decisions"`
+	Description     *Description `json:"description,omitempty"`
 }
 
 // CheckRecord is verify.check/1.

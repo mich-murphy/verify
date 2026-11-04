@@ -275,6 +275,14 @@ func validateBranch(b *Branch, name string) error {
 			return err
 		}
 	}
+	if d := b.Description; d != nil {
+		switch {
+		case !validSHA(d.SHA) || strings.TrimSpace(d.Title) == "" || strings.TrimSpace(d.Body) == "":
+			return invalid("incomplete branch description")
+		case d.Source != DescribedByClaude && d.Source != DescribedByCodex && d.Source != DescribedByCommits:
+			return invalid("unknown description source %q", d.Source)
+		}
+	}
 	return nil
 }
 

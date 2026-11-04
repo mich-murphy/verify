@@ -428,3 +428,24 @@ func TestLoadBranchAcceptsRecordsWrittenBeforeThePerRunBudget(t *testing.T) {
 		t.Fatalf("legacy fields survive a save: %s %v", data, err)
 	}
 }
+
+func TestBranchDescriptionRoundTripsAndIsValidated(t *testing.T) {
+	s := Open(t.TempDir())
+	want := Description{SHA: sha, Title: "Add the thing", Body: "It adds the thing.", Source: DescribedByCodex}
+	if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.Description = &want; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.LoadBranch("feature")
+	if err != nil || b.Description == nil || *b.Description != want {
+		t.Fatalf("%+v %v", b, err)
+	}
+	for _, bad := range []Description{
+		{SHA: "xyz", Title: "t", Body: "b", Source: DescribedByCodex},
+		{SHA: sha, Title: " ", Body: "b", Source: DescribedByCodex},
+		{SHA: sha, Title: "t", Body: "b", Source: "human"},
+	} {
+		if err := s.UpdateBranch(t.Context(), "feature", func(b *Branch) error { b.Description = &bad; return nil }); !errors.Is(err, ErrCorrupt) {
+			t.Fatalf("%+v accepted: %v", bad, err)
+		}
+	}
+}
